@@ -1,0 +1,51 @@
+"""
+CSV Loader — reads all *_exp.csv files from the data directory into DuckDB.
+"""
+
+import glob
+import os
+from db.connection import get_connection
+from config import CSV_DATA_DIR
+
+
+def load_csv_to_duckdb() -> int:
+    """
+    Scan CSV_DATA_DIR for *_exp.csv files and load them into options_raw.
+    Returns the total number of rows loaded.
+    """
+    conn = get_connection()
+
+    # Clear existing raw data for a clean reload
+    conn.execute("DELETE FROM options_raw")
+
+    pattern = os.path.join(CSV_DATA_DIR, "*_exp.csv")
+    csv_files = sorted(glob.glob(pattern))
+
+    if not csv_files:
+        raise FileNotFoundError(
+            f"No *_exp.csv files found in {CSV_DATA_DIR}. "
+            f"Pattern used: {pattern}"
+        )
+
+    total_rows = 0
+    for fpath in csv_files:
+        fname = os.path.basename(fpath)
+        # DuckDB can read CSV natively and very fast
+        conn.execute(f"""
+            INSERT INTO options_raw
+            SELECT * FROM read_csv_auto(
+                '{fpath.replace(chr(92), "/")}',
+                header = true,
+                dateformat = '%Y-%m-%d',
+                timestampformat = '%Y-%m-%d %H:%M:%S'
+            )
+        """)
+        count = conn.execute(
+            f"SELECT COUNT(*) FROM read_csv_auto('{fpath.replace(chr(92), '/')}')"
+        ).fetchone()[0]
+        total_rows += count
+        print(f"  [LOAD] {fname}: {count:,} rows")
+
+    actual = conn.execute("SELECT COUNT(*) FROM options_raw").fetchone()[0]
+    print(f"[LOAD] Total rows in options_raw: {actual:,}")
+    return actual
