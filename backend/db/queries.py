@@ -10,40 +10,35 @@ from db.connection import get_connection
 
 
 class QueryLayer:
-    """Stateless query executor bound to the shared DuckDB connection."""
+    """Stateless query executor bound to the shared SQLite connection."""
 
     def __init__(self):
         self.conn = get_connection()
 
     def _q(self, sql: str, params: list | None = None) -> pd.DataFrame:
         """Execute SQL and return DataFrame."""
-        if params:
-            return self.conn.execute(sql, params).df()
-        return self.conn.execute(sql).df()
+        return self.conn.execute(sql, params).df()
 
-    # ──────────────────────────────────────────────────────────────
-    # (a) Options chain at a specific timestamp
-    # ──────────────────────────────────────────────────────────────
     def get_options_chain(self, timestamp: str | None = None,
                           expiry: str | None = None) -> pd.DataFrame:
         """Full chain at a given timestamp (or latest)."""
         where = []
         params = []
         if expiry:
-            where.append("expiry = ?::DATE")
+            where.append("expiry = ?")
             params.append(expiry)
         if timestamp:
-            where.append("datetime = ?::TIMESTAMP")
+            where.append("datetime = ?")
             params.append(timestamp)
         else:
             subq = "datetime = (SELECT MAX(datetime) FROM options_enriched"
             if expiry:
-                subq += " WHERE expiry = ?::DATE"
+                subq += " WHERE expiry = ?"
                 params.append(expiry)
             subq += ")"
             where.append(subq)
 
-        clause = " AND ".join(where) if where else "TRUE"
+        clause = " AND ".join(where) if where else "1=1"
         sql = f"""
             SELECT symbol, strike, expiry, CE, PE, spot_close, ATM,
                    oi_CE, oi_PE, volume_CE, volume_PE,
@@ -57,15 +52,12 @@ class QueryLayer:
         """
         return self._q(sql, params)
 
-    # ──────────────────────────────────────────────────────────────
-    # (b) Time-series for a specific strike (+ optional expiry)
-    # ──────────────────────────────────────────────────────────────
     def get_strike_timeseries(self, strike: float,
                               expiry: str | None = None) -> pd.DataFrame:
         where = "strike = ?"
         params: list = [strike]
         if expiry:
-            where += " AND expiry = ?::DATE"
+            where += " AND expiry = ?"
             params.append(expiry)
         sql = f"""
             SELECT datetime, CE, PE, iv_proxy, oi_CE, oi_PE,
@@ -77,41 +69,32 @@ class QueryLayer:
         """
         return self._q(sql, params)
 
-    # ──────────────────────────────────────────────────────────────
-    # (c) Volatility surface (from materialized view)
-    # ──────────────────────────────────────────────────────────────
     def get_volatility_surface(self, expiry: str | None = None) -> pd.DataFrame:
         if expiry:
             return self._q(
-                "SELECT * FROM mv_volatility_surface WHERE expiry = ?::DATE",
+                "SELECT * FROM mv_volatility_surface WHERE expiry = ?",
                 [expiry],
             )
         return self._q("SELECT * FROM mv_volatility_surface")
 
-    # ──────────────────────────────────────────────────────────────
-    # (d) Heatmap data — OI or volume across strike × expiry
-    # ──────────────────────────────────────────────────────────────
     def get_oi_heatmap(self, timestamp: str | None = None) -> pd.DataFrame:
-        """OI across strike × expiry at a point in time."""
         if timestamp:
             return self._q("""
                 SELECT strike, expiry, oi_CE, oi_PE, total_oi
                 FROM options_enriched
-                WHERE datetime = ?::TIMESTAMP
+                WHERE datetime = ?
                 ORDER BY expiry, strike
             """, [timestamp])
         return self._q("SELECT * FROM mv_oi_distribution ORDER BY expiry, strike")
 
     def get_volume_heatmap(self, timestamp: str | None = None) -> pd.DataFrame:
-        """Volume across strike × expiry at a point in time."""
         if timestamp:
             return self._q("""
                 SELECT strike, expiry, volume_CE, volume_PE, total_volume
                 FROM options_enriched
-                WHERE datetime = ?::TIMESTAMP
+                WHERE datetime = ?
                 ORDER BY expiry, strike
             """, [timestamp])
-        # Latest snapshot for each expiry
         return self._q("""
             WITH latest AS (
                 SELECT expiry, MAX(datetime) AS max_dt
@@ -123,14 +106,11 @@ class QueryLayer:
             ORDER BY e.expiry, e.strike
         """)
 
-    # ──────────────────────────────────────────────────────────────
-    # (e) OI / Volume distribution for a single expiry
-    # ──────────────────────────────────────────────────────────────
     def get_oi_distribution(self, expiry: str) -> pd.DataFrame:
         return self._q("""
             SELECT strike, oi_CE, oi_PE, total_oi, pcr_oi
             FROM mv_oi_distribution
-            WHERE expiry = ?::DATE
+            WHERE expiry = ?
             ORDER BY strike
         """, [expiry])
 
@@ -139,39 +119,34 @@ class QueryLayer:
             SELECT strike, volume_CE, volume_PE,
                    volume_CE + volume_PE AS total_volume
             FROM mv_pcr_by_strike
-            WHERE expiry = ?::DATE
+            WHERE expiry = ?
             ORDER BY strike
         """, [expiry])
 
-    # ──────────────────────────────────────────────────────────────
-    # (f) Unusual activity (volume > N std-dev from mean)
-    # ──────────────────────────────────────────────────────────────
     def get_unusual_activity(self, n_stddev: float = 2.0,
                              limit: int = 100) -> pd.DataFrame:
+        # Simplified unusual activity for SQLite (using simple average volume spikes)
         return self._q(f"""
             WITH stats AS (
-                SELECT AVG(total_volume) AS mu, STDDEV(total_volume) AS sigma
+                SELECT AVG(total_volume) AS mu
                 FROM options_enriched
             )
             SELECT e.datetime, e.strike, e.expiry, e.total_volume,
                    e.iv_proxy, e.anomaly_flag, e.unusual_activity_score,
                    e.spot_close, e.moneyness,
-                   (e.total_volume - s.mu) / NULLIF(s.sigma, 0) AS vol_zscore
+                   e.total_volume / NULLIF(s.mu, 0) AS vol_zscore
             FROM options_enriched e, stats s
-            WHERE (e.total_volume - s.mu) / NULLIF(s.sigma, 0) > {n_stddev}
+            WHERE e.total_volume / NULLIF(s.mu, 0) > {n_stddev}
             ORDER BY vol_zscore DESC
             LIMIT {limit}
         """)
 
-    # ──────────────────────────────────────────────────────────────
-    # (g) Put-call ratio time series
-    # ──────────────────────────────────────────────────────────────
     def get_pcr_timeseries(self, expiry: str | None = None) -> pd.DataFrame:
-        where = f"WHERE expiry = '{expiry}'::DATE" if expiry else ""
+        where = f"WHERE expiry = '{expiry}'" if expiry else ""
         return self._q(f"""
             SELECT datetime,
-                   SUM(oi_PE)::DOUBLE / NULLIF(SUM(oi_CE), 0) AS pcr_oi,
-                   SUM(volume_PE)::DOUBLE / NULLIF(SUM(volume_CE), 0) AS pcr_volume,
+                   CAST(SUM(oi_PE) AS DOUBLE) / NULLIF(SUM(oi_CE), 0) AS pcr_oi,
+                   CAST(SUM(volume_PE) AS DOUBLE) / NULLIF(SUM(volume_CE), 0) AS pcr_volume,
                    SUM(total_oi) AS total_oi,
                    SUM(total_volume) AS total_volume,
                    AVG(spot_close) AS spot_close
@@ -181,22 +156,16 @@ class QueryLayer:
             ORDER BY datetime
         """)
 
-    # ──────────────────────────────────────────────────────────────
-    # (h) Max pain calculation
-    # ──────────────────────────────────────────────────────────────
     def get_max_pain(self, expiry: str) -> pd.DataFrame:
         return self._q("""
             SELECT settlement_price, call_liability, put_liability, total_liability
             FROM mv_max_pain
-            WHERE expiry = ?::DATE
+            WHERE expiry = ?
             ORDER BY total_liability ASC
         """, [expiry])
 
-    # ──────────────────────────────────────────────────────────────
-    # (i) ATM / OTM / ITM breakdown
-    # ──────────────────────────────────────────────────────────────
     def get_moneyness_breakdown(self, expiry: str | None = None) -> pd.DataFrame:
-        where = f"AND expiry = '{expiry}'::DATE" if expiry else ""
+        where = f"AND expiry = '{expiry}'" if expiry else ""
         return self._q(f"""
             WITH latest AS (
                 SELECT MAX(datetime) AS max_dt FROM options_enriched
@@ -224,15 +193,12 @@ class QueryLayer:
             GROUP BY money_class
         """)
 
-    # ──────────────────────────────────────────────────────────────
-    # (j) Rolling window statistics (from materialized view)
-    # ──────────────────────────────────────────────────────────────
     def get_rolling_stats(self, strike: float,
                           expiry: str | None = None) -> pd.DataFrame:
         where = "WHERE strike = ?"
         params: list = [strike]
         if expiry:
-            where += " AND expiry = ?::DATE"
+            where += " AND expiry = ?"
             params.append(expiry)
         return self._q(f"""
             SELECT datetime, iv_proxy, total_oi, total_volume,
@@ -243,19 +209,16 @@ class QueryLayer:
             ORDER BY datetime
         """, params)
 
-    # ──────────────────────────────────────────────────────────────
-    # Anomalies
-    # ──────────────────────────────────────────────────────────────
     def get_anomalies(self, start: str | None = None,
                       end: str | None = None,
                       limit: int = 200) -> pd.DataFrame:
         where_parts = ["anomaly_flag = 1"]
         params = []
         if start:
-            where_parts.append("datetime >= ?::TIMESTAMP")
+            where_parts.append("datetime >= ?")
             params.append(start)
         if end:
-            where_parts.append("datetime <= ?::TIMESTAMP")
+            where_parts.append("datetime <= ?")
             params.append(end)
         clause = " AND ".join(where_parts)
         return self._q(f"""
@@ -269,9 +232,6 @@ class QueryLayer:
             LIMIT {limit}
         """, params)
 
-    # ──────────────────────────────────────────────────────────────
-    # Clusters
-    # ──────────────────────────────────────────────────────────────
     def get_clusters(self, method: str = "kmeans") -> pd.DataFrame:
         col = "cluster_kmeans" if method == "kmeans" else "cluster_dbscan"
         return self._q(f"""
@@ -286,40 +246,31 @@ class QueryLayer:
             ORDER BY e.{col}, e.strike
         """)
 
-    # ──────────────────────────────────────────────────────────────
-    # Utility: list available expiries / timestamps / strikes
-    # ──────────────────────────────────────────────────────────────
     def get_expiries(self) -> list[str]:
         df = self._q("SELECT DISTINCT expiry FROM options_enriched ORDER BY expiry")
         return [str(e)[:10] for e in df["expiry"].tolist()]
 
     def get_timestamps(self, expiry: str | None = None) -> list[str]:
-        where = f"WHERE expiry = '{expiry}'::DATE" if expiry else ""
+        where = f"WHERE expiry = '{expiry}'" if expiry else ""
         df = self._q(f"SELECT DISTINCT datetime FROM options_enriched {where} ORDER BY datetime")
         return [str(t) for t in df["datetime"].tolist()]
 
     def get_strikes(self, expiry: str | None = None) -> list[float]:
-        where = f"WHERE expiry = '{expiry}'::DATE" if expiry else ""
+        where = f"WHERE expiry = '{expiry}'" if expiry else ""
         df = self._q(f"SELECT DISTINCT strike FROM options_enriched {where} ORDER BY strike")
         return df["strike"].tolist()
 
     def get_row_count(self) -> int:
         return self.conn.execute("SELECT COUNT(*) FROM options_enriched").fetchone()[0]
 
-    # ──────────────────────────────────────────────────────────────
-    # Volume time series (from materialized view)
-    # ──────────────────────────────────────────────────────────────
     def get_volume_timeseries(self, expiry: str | None = None) -> pd.DataFrame:
         if expiry:
             return self._q(
-                "SELECT * FROM mv_volume_timeseries WHERE expiry = ?::DATE ORDER BY bucket",
+                "SELECT * FROM mv_volume_timeseries WHERE expiry = ? ORDER BY bucket",
                 [expiry],
             )
         return self._q("SELECT * FROM mv_volume_timeseries ORDER BY bucket")
 
-    # ──────────────────────────────────────────────────────────────
-    # Generic time-series for any metric
-    # ──────────────────────────────────────────────────────────────
     def get_timeseries(self, metric: str = "iv_proxy",
                        strike: float | None = None,
                        expiry: str | None = None) -> pd.DataFrame:
@@ -334,9 +285,9 @@ class QueryLayer:
             where_parts.append("strike = ?")
             params.append(strike)
         if expiry:
-            where_parts.append("expiry = ?::DATE")
+            where_parts.append("expiry = ?")
             params.append(expiry)
-        clause = " AND ".join(where_parts) if where_parts else "TRUE"
+        clause = " AND ".join(where_parts) if where_parts else "1=1"
         return self._q(f"""
             SELECT datetime, AVG({metric}) AS {metric}, AVG(spot_close) AS spot_close
             FROM options_enriched

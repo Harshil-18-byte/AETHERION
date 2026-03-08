@@ -10,155 +10,97 @@ from config import FORECAST_HORIZON, ROLLING_WINDOW_SHORT, ROLLING_WINDOW_LONG
 
 def run_timeseries_analysis() -> dict:
     """
-    Compute time-series features:
-      - Rolling window averages / std devs (already in materialized view)
-      - Trend detection on IV and OI
-      - Simple linear extrapolation forecasts
-    Returns summary dict with detected trends.
+    Compute time-series features using SQLite and Pandas.
     """
     conn = get_connection()
 
-    # ────────────────────────────────────────────────────────────
-    # 1. IV TREND DETECTION per expiry
-    #    Fit a simple linear slope to the last N IV observations.
-    # ────────────────────────────────────────────────────────────
-    iv_trends = conn.execute("""
-        WITH per_bucket AS (
-            SELECT
-                expiry,
-                time_bucket(INTERVAL '5 minutes', datetime) AS bucket,
-                AVG(iv_proxy) AS avg_iv,
-                ROW_NUMBER() OVER (PARTITION BY expiry ORDER BY time_bucket(INTERVAL '5 minutes', datetime)) AS tick
-            FROM options_enriched
-            GROUP BY expiry, time_bucket(INTERVAL '5 minutes', datetime)
-        ),
-        slope_calc AS (
-            SELECT
-                expiry,
-                REGR_SLOPE(avg_iv, tick) AS iv_slope,
-                REGR_R2(avg_iv, tick)    AS iv_r2,
-                COUNT(*)                 AS n_points,
-                MIN(avg_iv) AS iv_min,
-                MAX(avg_iv) AS iv_max,
-                AVG(avg_iv) AS iv_mean
-            FROM per_bucket
-            GROUP BY expiry
-        )
-        SELECT * FROM slope_calc ORDER BY expiry
+    # Get bucketed data (5-minute windows)
+    bucket_data = conn.execute("""
+        SELECT
+            expiry,
+            datetime(
+                strftime('%s', datetime) - (strftime('%s', datetime) % 300),
+                'unixepoch'
+            ) AS bucket,
+            AVG(iv_proxy) AS avg_iv,
+            SUM(total_oi) AS total_oi,
+            SUM(total_volume) AS total_vol
+        FROM options_enriched
+        GROUP BY expiry, bucket
+        ORDER BY expiry, bucket
     """).df()
+
+    if len(bucket_data) < 5:
+        print("[TIMESERIES] Not enough data for time-series analysis, skipping")
+        return {"iv_trends": [], "oi_trends": [], "volume_buildups": []}
 
     iv_trend_list = []
-    for _, row in iv_trends.iterrows():
-        slope = row["iv_slope"] if pd.notna(row["iv_slope"]) else 0
-        if slope > 0.01:
-            direction = "RISING"
-        elif slope < -0.01:
-            direction = "FALLING"
+    oi_trend_list = []
+    vol_buildup_list = []
+
+    for exp in bucket_data["expiry"].unique():
+        df_exp = bucket_data[bucket_data["expiry"] == exp].copy()
+        df_exp["tick"] = range(len(df_exp))
+        
+        # 1. IV Trend
+        if len(df_exp) > 1:
+            z = np.polyfit(df_exp["tick"], df_exp["avg_iv"], 1)
+            slope = float(z[0])
+            # Simple R2 via correlation
+            r2 = float(df_exp["avg_iv"].corr(df_exp["tick"])**2)
         else:
-            direction = "FLAT"
+            slope, r2 = 0, 0
+            
+        direction = "FLAT"
+        if slope > 0.01: direction = "RISING"
+        elif slope < -0.01: direction = "FALLING"
+
         iv_trend_list.append({
-            "expiry": str(row["expiry"])[:10],
+            "expiry": str(exp)[:10],
             "direction": direction,
             "slope": round(float(slope), 6),
-            "r2": round(float(row["iv_r2"]) if pd.notna(row["iv_r2"]) else 0, 4),
-            "iv_range": [round(float(row["iv_min"]), 4), round(float(row["iv_max"]), 4)],
-            "iv_mean": round(float(row["iv_mean"]), 4),
-            "n_points": int(row["n_points"]),
+            "r2": round(r2, 4),
+            "iv_range": [round(float(df_exp["avg_iv"].min()), 4), round(float(df_exp["avg_iv"].max()), 4)],
+            "iv_mean": round(float(df_exp["avg_iv"].mean()), 4),
+            "n_points": len(df_exp),
         })
 
-    # ────────────────────────────────────────────────────────────
-    # 2. OI BUILDUP / DEPLETION detection
-    # ────────────────────────────────────────────────────────────
-    oi_trends = conn.execute("""
-        WITH per_bucket AS (
-            SELECT
-                expiry,
-                time_bucket(INTERVAL '5 minutes', datetime) AS bucket,
-                SUM(total_oi) AS total_oi,
-                ROW_NUMBER() OVER (PARTITION BY expiry ORDER BY time_bucket(INTERVAL '5 minutes', datetime)) AS tick
-            FROM options_enriched
-            GROUP BY expiry, time_bucket(INTERVAL '5 minutes', datetime)
-        ),
-        slope_calc AS (
-            SELECT
-                expiry,
-                REGR_SLOPE(total_oi, tick) AS oi_slope,
-                FIRST(total_oi ORDER BY tick ASC)  AS oi_start,
-                LAST(total_oi ORDER BY tick DESC)  AS oi_end,
-                COUNT(*) AS n_points
-            FROM per_bucket
-            GROUP BY expiry
-        )
-        SELECT * FROM slope_calc ORDER BY expiry
-    """).df()
-
-    oi_trend_list = []
-    for _, row in oi_trends.iterrows():
-        slope = row["oi_slope"] if pd.notna(row["oi_slope"]) else 0
-        oi_start = float(row["oi_start"])
-        oi_end = float(row["oi_end"])
+        # 2. OI Trend
+        oi_start = float(df_exp["total_oi"].iloc[0])
+        oi_end = float(df_exp["total_oi"].iloc[-1])
         pct_change = ((oi_end - oi_start) / oi_start * 100) if oi_start > 0 else 0
-
-        if slope > 0:
-            direction = "BUILDUP"
-        elif slope < 0:
-            direction = "UNWINDING"
+        
+        if len(df_exp) > 1:
+            z_oi = np.polyfit(df_exp["tick"], df_exp["total_oi"], 1)
+            oi_slope = float(z_oi[0])
         else:
-            direction = "STABLE"
+            oi_slope = 0
+            
+        oi_direction = "STABLE"
+        if oi_slope > 0: oi_direction = "BUILDUP"
+        elif oi_slope < 0: oi_direction = "UNWINDING"
 
         oi_trend_list.append({
-            "expiry": str(row["expiry"])[:10],
-            "direction": direction,
+            "expiry": str(exp)[:10],
+            "direction": oi_direction,
             "oi_change_pct": round(pct_change, 2),
             "oi_start": round(oi_start, 0),
             "oi_end": round(oi_end, 0),
-            "n_points": int(row["n_points"]),
+            "n_points": len(df_exp),
         })
 
-    # ────────────────────────────────────────────────────────────
-    # 3. VOLUME BUILDUP detection (last N vs overall)
-    # ────────────────────────────────────────────────────────────
-    vol_buildups = conn.execute("""
-        WITH bucketed AS (
-            SELECT
-                expiry,
-                time_bucket(INTERVAL '5 minutes', datetime) AS bucket,
-                SUM(total_volume) AS bucket_vol
-            FROM options_enriched
-            GROUP BY expiry, time_bucket(INTERVAL '5 minutes', datetime)
-        ),
-        ranked AS (
-            SELECT *,
-                   ROW_NUMBER() OVER (PARTITION BY expiry ORDER BY bucket DESC) AS rn,
-                   COUNT(*) OVER (PARTITION BY expiry) AS total_buckets
-            FROM bucketed
-        )
-        SELECT
-            expiry,
-            AVG(CASE WHEN rn <= 5 THEN bucket_vol END) AS recent_avg,
-            AVG(bucket_vol)                              AS overall_avg
-        FROM ranked
-        GROUP BY expiry
-        ORDER BY expiry
-    """).df()
-
-    vol_buildup_list = []
-    for _, row in vol_buildups.iterrows():
-        recent = float(row["recent_avg"]) if pd.notna(row["recent_avg"]) else 0
-        overall = float(row["overall_avg"]) if pd.notna(row["overall_avg"]) else 1
+        # 3. Volume Buildup
+        recent = df_exp["total_vol"].tail(5).mean()
+        overall = df_exp["total_vol"].mean()
         ratio = recent / overall if overall > 0 else 1
-
-        if ratio > 1.5:
-            signal = "STRONG_BUILDUP"
-        elif ratio > 1.1:
-            signal = "MODERATE_BUILDUP"
-        elif ratio < 0.5:
-            signal = "DRYING_UP"
-        else:
-            signal = "NORMAL"
+        
+        signal = "NORMAL"
+        if ratio > 1.5: signal = "STRONG_BUILDUP"
+        elif ratio > 1.1: signal = "MODERATE_BUILDUP"
+        elif ratio < 0.5: signal = "DRYING_UP"
 
         vol_buildup_list.append({
-            "expiry": str(row["expiry"])[:10],
+            "expiry": str(exp)[:10],
             "signal": signal,
             "recent_vs_avg_ratio": round(ratio, 2),
         })

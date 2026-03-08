@@ -12,8 +12,8 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent          # CodeForge/
 BACKEND_ROOT = Path(__file__).resolve().parent                 # CodeForge/backend/
 
-# DuckDB: use ":memory:" for ephemeral or a file for persistence
-DUCKDB_PATH: str = os.getenv("OPTIX_DUCKDB_PATH", ":memory:")
+# SQLite Analytics: use ":memory:" for ephemeral or a file for persistence
+ANALYTICS_DB_PATH: str = os.getenv("OPTIX_ANALYTICS_DB_PATH", "./optix.db")
 
 # CSV data directory (contains the *_exp.csv files)
 CSV_DATA_DIR: str = os.getenv(

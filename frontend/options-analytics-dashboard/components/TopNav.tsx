@@ -1,6 +1,9 @@
 import { useTheme } from "next-themes";
 import { Moon, Sun, Upload } from "lucide-react";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useAuth } from "../contexts/AuthContext";
+import { LoginModal } from "./modals/LoginModal";
+import { RegisterModal } from "./modals/RegisterModal";
 
 interface TopNavProps {
   selectedExpiry: string;
@@ -14,6 +17,9 @@ interface TopNavProps {
 export default function TopNav({ selectedExpiry, expiries, onExpiryChange, lastUpdated, spotPrice, onFileUpload }: TopNavProps) {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const { user, logout } = useAuth();
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
+  const [isRegisterOpen, setIsRegisterOpen] = useState(false);
 
   // Avoid hydration mismatch
   useEffect(() => setMounted(true), []);
@@ -45,6 +51,33 @@ export default function TopNav({ selectedExpiry, expiries, onExpiryChange, lastU
       </div>
 
       <div className="topnav-right">
+        {user ? (
+          <div className="flex items-center gap-3 mr-4">
+            <span className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">User: {user.full_name}</span>
+            <button 
+              onClick={logout}
+              className="px-2 py-1 text-[10px] uppercase tracking-widest bg-red-900/20 text-red-400 border border-red-900/50 rounded hover:bg-red-900/40 transition-colors"
+            >
+              Logout
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 mr-4">
+            <button 
+              onClick={() => setIsLoginOpen(true)}
+              className="px-2 py-1 text-[10px] uppercase tracking-widest text-gray-400 hover:text-white transition-colors"
+            >
+              Login
+            </button>
+            <button 
+              onClick={() => setIsRegisterOpen(true)}
+              className="px-2 py-1 text-[10px] uppercase tracking-widest bg-blue-600/20 text-blue-400 border border-blue-600/50 rounded hover:bg-blue-600/40 transition-colors"
+            >
+              Register
+            </button>
+          </div>
+        )}
+
         {mounted && (
           <button
             className="theme-toggle-btn"
@@ -83,6 +116,24 @@ export default function TopNav({ selectedExpiry, expiries, onExpiryChange, lastU
           </span>
         )}
       </div>
+
+      <LoginModal 
+        isOpen={isLoginOpen} 
+        onClose={() => setIsLoginOpen(false)} 
+        onSwitchToRegister={() => {
+          setIsLoginOpen(false);
+          setIsRegisterOpen(true);
+        }}
+      />
+      
+      <RegisterModal 
+        isOpen={isRegisterOpen} 
+        onClose={() => setIsRegisterOpen(false)} 
+        onSwitchToLogin={() => {
+          setIsRegisterOpen(false);
+          setIsLoginOpen(true);
+        }}
+      />
     </header>
   );
 }

@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from fastapi import FastAPI, HTTPException, Query, BackgroundTasks, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, BackgroundTasks, WebSocket, WebSocketDisconnect, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -23,10 +23,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from main import initialize
 from services.analytics_service import AnalyticsService
 from features.pricing import calculate_greeks
+from auth.router import router as auth_router, get_current_user, User as AuthUser
+from db.sqlite import init_db, get_db, User as DBUser
 import pandas as pd
 
 # Initialize the full backend pipeline
 service: AnalyticsService = initialize()
+
+# Initialize SQLite DB
+init_db()
 
 app = FastAPI(
     title="OptiX API",
@@ -42,6 +47,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include Auth Router
+app.include_router(auth_router)
 
 # --- Models ---
 
@@ -110,7 +118,7 @@ async def get_summary():
     return service.get_market_summary()
 
 @app.get("/insights", response_model=InsightsResponse, tags=["Analytics"])
-async def get_insights():
+async def get_insights(current_user: DBUser = Depends(get_current_user)):
     """Get ML-generated insights and alerts."""
     return service.get_insights()
 
@@ -124,17 +132,38 @@ async def get_strikes():
     """List all unique strike prices."""
     return service.get_strikes()
 
+@app.get("/analysis", tags=["Analytics"])
+async def get_full_analysis(
+    expiry: Optional[str] = None,
+    current_user: DBUser = Depends(get_current_user)
+):
+    """Aggregate all analytics for a specific expiry (or latest)."""
+    expiries = service.get_expiries()
+    selected_expiry = expiry if expiry else (expiries[-1] if expiries else None)
+    
+    analysis = service.get_full_analysis(selected_expiry)
+    
+    return {
+        "expiries": expiries,
+        "selected_expiry": selected_expiry,
+        "analysis": analysis
+    }
+
 @app.get("/chain", response_model=List[OptionRow], tags=["Data"])
 async def get_chain(
     expiry: Optional[str] = None,
-    timestamp: Optional[str] = None
+    timestamp: Optional[str] = None,
+    current_user: DBUser = Depends(get_current_user)
 ):
     """Get enriched option chain with ML filters."""
     df = service.get_options_chain(timestamp, expiry)
     return df.to_dict(orient="records")
 
 @app.get("/greeks/surface", tags=["Analytics"])
-async def get_greek_surface(greek: str = "implied_vol"):
+async def get_greek_surface(
+    greek: str = "implied_vol",
+    current_user: DBUser = Depends(get_current_user)
+):
     """Get 3D surface data for a specific greek."""
     if greek not in ["implied_vol", "delta", "gamma", "vega", "theta", "vanna", "charm"]:
         raise HTTPException(status_code=400, detail="Invalid greek requested")
@@ -142,7 +171,7 @@ async def get_greek_surface(greek: str = "implied_vol"):
     return service.get_greek_surface(greek)
 
 @app.get("/volume/profile", tags=["Analytics"])
-async def get_volume_profile():
+async def get_volume_profile(current_user: DBUser = Depends(get_current_user)):
     """Get volume and Open Interest profile by strike."""
     return service.get_volume_profile()
 
@@ -178,7 +207,10 @@ async def calulate_option_price(req: PricerRequest):
     }
 
 @app.post("/refresh", tags=["Admin"])
-async def refresh_data(background_tasks: BackgroundTasks):
+async def refresh_data(
+    background_tasks: BackgroundTasks,
+    current_user: DBUser = Depends(get_current_user)
+):
     """Trigger a full data reload and re-run ML pipeline."""
     global service
     background_tasks.add_task(initialize)

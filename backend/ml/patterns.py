@@ -144,7 +144,7 @@ def run_pattern_detection() -> dict:
         })
 
     # ═══════════════════════════════════════════════════════════════
-    # 3. MAX PAIN per expiry (computed inline to avoid MV dependency)
+    # 3. MAX PAIN per expiry
     # ═══════════════════════════════════════════════════════════════
     max_pain = conn.execute("""
         WITH latest AS (
@@ -176,15 +176,11 @@ def run_pattern_detection() -> dict:
             FROM chain c
             CROSS JOIN all_strikes s
             GROUP BY c.expiry, s.settlement
-        ),
-        min_liability AS (
-            SELECT expiry,
-                   FIRST(settlement_price ORDER BY total_liability ASC) AS max_pain_strike,
-                   MIN(total_liability) AS min_total_liability
-            FROM liabilities
-            GROUP BY expiry
         )
-        SELECT * FROM min_liability ORDER BY expiry
+        SELECT expiry, settlement_price AS max_pain_strike, MIN(total_liability) AS min_total_liability
+        FROM liabilities
+        GROUP BY expiry
+        ORDER BY expiry
     """).df()
 
     max_pain_list = []

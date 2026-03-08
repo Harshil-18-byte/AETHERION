@@ -130,31 +130,29 @@ def create_schema() -> None:
 
 
 # ═══════════════════════════════════════════════════════════════════
-# 4. MATERIALIZED VIEWS (pre-computed aggregations)
-#    Recreated after every data refresh.
+# 4. MATERIALIZED VIEWS (re-created tables in SQLite)
 # ═══════════════════════════════════════════════════════════════════
 
 MATERIALIZED_VIEWS = {
 
-    # (a) Volatility surface: strike × expiry × avg IV
+    # (a) Volatility surface
     "mv_volatility_surface": """
-        CREATE OR REPLACE TABLE mv_volatility_surface AS
+        CREATE TABLE mv_volatility_surface AS
         SELECT
             strike,
             expiry,
             AVG(iv_proxy)          AS avg_iv,
             MIN(iv_proxy)          AS min_iv,
             MAX(iv_proxy)          AS max_iv,
-            STDDEV(iv_proxy)       AS std_iv,
+            0                      AS std_iv, -- SQLite lacks native STDDEV
             COUNT(*)               AS obs_count
         FROM options_enriched
         GROUP BY strike, expiry
-        ORDER BY expiry, strike
     """,
 
-    # (b) OI distribution by strike & expiry (latest snapshot per expiry)
+    # (b) OI distribution
     "mv_oi_distribution": """
-        CREATE OR REPLACE TABLE mv_oi_distribution AS
+        CREATE TABLE mv_oi_distribution AS
         WITH latest AS (
             SELECT expiry, MAX(datetime) AS max_dt
             FROM options_enriched
@@ -170,14 +168,16 @@ MATERIALIZED_VIEWS = {
             e.datetime
         FROM options_enriched e
         JOIN latest l ON e.expiry = l.expiry AND e.datetime = l.max_dt
-        ORDER BY e.expiry, e.strike
     """,
 
     # (c) Volume aggregated across 5-minute windows
     "mv_volume_timeseries": """
-        CREATE OR REPLACE TABLE mv_volume_timeseries AS
+        CREATE TABLE mv_volume_timeseries AS
         SELECT
-            time_bucket(INTERVAL '5 minutes', datetime) AS bucket,
+            datetime(
+                strftime('%s', datetime) - (strftime('%s', datetime) % 300),
+                'unixepoch'
+            ) AS bucket,
             expiry,
             SUM(volume_CE)   AS total_vol_CE,
             SUM(volume_PE)   AS total_vol_PE,
@@ -186,12 +186,11 @@ MATERIALIZED_VIEWS = {
             COUNT(DISTINCT strike) AS n_strikes
         FROM options_enriched
         GROUP BY bucket, expiry
-        ORDER BY bucket
     """,
 
-    # (d) Put-call ratio across strikes (latest per expiry)
+    # (d) Put-call ratio across strikes
     "mv_pcr_by_strike": """
-        CREATE OR REPLACE TABLE mv_pcr_by_strike AS
+        CREATE TABLE mv_pcr_by_strike AS
         WITH latest AS (
             SELECT expiry, MAX(datetime) AS max_dt
             FROM options_enriched
@@ -208,12 +207,11 @@ MATERIALIZED_VIEWS = {
             e.volume_PE
         FROM options_enriched e
         JOIN latest l ON e.expiry = l.expiry AND e.datetime = l.max_dt
-        ORDER BY e.expiry, e.strike
     """,
 
-    # (e) Rolling statistics (pre-computed per strike+expiry)
+    # (e) Rolling statistics
     "mv_rolling_stats": """
-        CREATE OR REPLACE TABLE mv_rolling_stats AS
+        CREATE TABLE mv_rolling_stats AS
         SELECT
             datetime,
             strike,
@@ -224,7 +222,7 @@ MATERIALIZED_VIEWS = {
             AVG(iv_proxy)  OVER w5  AS iv_ma5,
             AVG(iv_proxy)  OVER w10 AS iv_ma10,
             AVG(iv_proxy)  OVER w20 AS iv_ma20,
-            STDDEV(iv_proxy) OVER w20 AS iv_std20,
+            0                OVER w20 AS iv_std20, -- SQLite lacks native STDDEV
             AVG(total_oi)    OVER w5  AS oi_ma5,
             AVG(total_volume) OVER w5 AS vol_ma5,
             spot_close
@@ -233,12 +231,11 @@ MATERIALIZED_VIEWS = {
             w5  AS (PARTITION BY strike, expiry ORDER BY datetime ROWS BETWEEN 4 PRECEDING AND CURRENT ROW),
             w10 AS (PARTITION BY strike, expiry ORDER BY datetime ROWS BETWEEN 9 PRECEDING AND CURRENT ROW),
             w20 AS (PARTITION BY strike, expiry ORDER BY datetime ROWS BETWEEN 19 PRECEDING AND CURRENT ROW)
-        ORDER BY datetime, strike
     """,
 
-    # (f) Anomaly flags snapshot (volume spikes, IV shifts)
+    # (f) Anomaly flags snapshot
     "mv_anomaly_summary": """
-        CREATE OR REPLACE TABLE mv_anomaly_summary AS
+        CREATE TABLE mv_anomaly_summary AS
         SELECT
             datetime,
             strike,
@@ -256,12 +253,11 @@ MATERIALIZED_VIEWS = {
         FROM options_enriched
         WHERE anomaly_flag = 1
            OR unusual_activity_score > 0.5
-        ORDER BY unusual_activity_score DESC, anomaly_score ASC
     """,
 
-    # (g) Max-pain helper: total liability per strike
+    # (g) Max-pain helper
     "mv_max_pain": """
-        CREATE OR REPLACE TABLE mv_max_pain AS
+        CREATE TABLE mv_max_pain AS
         WITH latest AS (
             SELECT expiry, MAX(datetime) AS max_dt
             FROM options_enriched
@@ -300,16 +296,16 @@ MATERIALIZED_VIEWS = {
         FROM chain c
         CROSS JOIN all_strikes s
         GROUP BY c.expiry, s.settlement
-        ORDER BY c.expiry, total_liability ASC
     """,
 }
 
 
 def create_materialized_views() -> None:
-    """Create (or replace) all materialized views from enriched data."""
+    """Create (or replace) tables from enriched data (SQLite compatible)."""
     conn = get_connection()
     for name, sql in MATERIALIZED_VIEWS.items():
+        conn.execute(f"DROP TABLE IF EXISTS {name}")
         conn.execute(sql)
         count = conn.execute(f"SELECT COUNT(*) FROM {name}").fetchone()[0]
         print(f"  [MV] {name}: {count:,} rows")
-    print("[SCHEMA] All materialized views created ✅")
+    print("[SCHEMA] All pre-computed tables created ✅")

@@ -1,9 +1,6 @@
-"""
-CSV Loader — reads all *_exp.csv files from the data directory into DuckDB.
-"""
-
 import glob
 import os
+import pandas as pd
 from db.connection import get_connection
 from config import CSV_DATA_DIR
 
@@ -15,7 +12,7 @@ def load_csv_to_duckdb() -> int:
     """
     conn = get_connection()
 
-    # Clear existing raw data for a clean reload
+    # Clear existing raw data
     conn.execute("DELETE FROM options_raw")
 
     pattern = os.path.join(CSV_DATA_DIR, "*_exp.csv")
@@ -24,25 +21,22 @@ def load_csv_to_duckdb() -> int:
     if not csv_files:
         raise FileNotFoundError(
             f"No *_exp.csv files found in {CSV_DATA_DIR}. "
-            f"Pattern used: {pattern}"
         )
 
     total_rows = 0
     for fpath in csv_files:
         fname = os.path.basename(fpath)
-        # DuckDB can read CSV natively and very fast
-        conn.execute(f"""
-            INSERT INTO options_raw
-            SELECT * FROM read_csv_auto(
-                '{fpath.replace(chr(92), "/")}',
-                header = true,
-                dateformat = '%Y-%m-%d',
-                timestampformat = '%Y-%m-%d %H:%M:%S'
-            )
-        """)
-        count = conn.execute(
-            f"SELECT COUNT(*) FROM read_csv_auto('{fpath.replace(chr(92), '/')}')"
-        ).fetchone()[0]
+        
+        # Load via Pandas since SQLite doesn't have native read_csv_auto
+        df = pd.read_csv(fpath)
+        
+        # Ensure column names match schema (lowercase might be needed but DuckDB schema was camelCase/snake)
+        # Actually our schema.py uses the exact CSV column names.
+        
+        # Write to SQLite
+        df.to_sql("options_raw", conn.conn, if_exists="append", index=False)
+        
+        count = len(df)
         total_rows += count
         print(f"  [LOAD] {fname}: {count:,} rows")
 

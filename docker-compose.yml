@@ -1,0 +1,30 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - backend_db:/app/optix.db
+    environment:
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-default-secret-key}
+    restart: always
+
+  frontend:
+    build:
+      context: ./frontend/options-analytics-dashboard
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    restart: always
+
+volumes:
+  backend_db:
