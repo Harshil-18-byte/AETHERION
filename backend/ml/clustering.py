@@ -62,11 +62,18 @@ def run_clustering() -> dict:
     conn.register("_cluster_labels", update_df)
     conn.execute("""
         UPDATE options_enriched
-        SET cluster_kmeans = cl.cluster_kmeans,
-            cluster_dbscan = cl.cluster_dbscan
-        FROM _cluster_labels cl
-        WHERE options_enriched.strike = cl.strike
-          AND options_enriched.expiry = cl.expiry
+        SET cluster_kmeans = (
+            SELECT cl.cluster_kmeans FROM _cluster_labels cl 
+            WHERE cl.strike = options_enriched.strike AND cl.expiry = options_enriched.expiry
+        ),
+        cluster_dbscan = (
+            SELECT cl.cluster_dbscan FROM _cluster_labels cl 
+            WHERE cl.strike = options_enriched.strike AND cl.expiry = options_enriched.expiry
+        )
+        WHERE EXISTS (
+            SELECT 1 FROM _cluster_labels cl 
+            WHERE cl.strike = options_enriched.strike AND cl.expiry = options_enriched.expiry
+        )
     """)
     conn.unregister("_cluster_labels")
 

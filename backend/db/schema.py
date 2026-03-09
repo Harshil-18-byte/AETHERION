@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS options_enriched (
 
     -- moneyness & position
     moneyness       DOUBLE,      -- strike / spot_close
-    days_to_expiry  INTEGER,     -- expiry - datetime::DATE
+    days_to_expiry  INTEGER,     -- CAST(julianday(expiry) - julianday(datetime) AS INTEGER)
 
     -- ratios
     pcr_oi          DOUBLE,      -- oi_PE / oi_CE
@@ -175,7 +175,7 @@ MATERIALIZED_VIEWS = {
         CREATE TABLE mv_volume_timeseries AS
         SELECT
             datetime(
-                strftime('%s', datetime) - (strftime('%s', datetime) % 300),
+                (unixepoch(datetime) / 300) * 300,
                 'unixepoch'
             ) AS bucket,
             expiry,
@@ -219,18 +219,14 @@ MATERIALIZED_VIEWS = {
             iv_proxy,
             total_oi,
             total_volume,
-            AVG(iv_proxy)  OVER w5  AS iv_ma5,
-            AVG(iv_proxy)  OVER w10 AS iv_ma10,
-            AVG(iv_proxy)  OVER w20 AS iv_ma20,
-            0                OVER w20 AS iv_std20, -- SQLite lacks native STDDEV
-            AVG(total_oi)    OVER w5  AS oi_ma5,
-            AVG(total_volume) OVER w5 AS vol_ma5,
+            AVG(iv_proxy)  OVER (PARTITION BY strike, expiry ORDER BY datetime ROWS BETWEEN 4 PRECEDING AND CURRENT ROW)  AS iv_ma5,
+            AVG(iv_proxy)  OVER (PARTITION BY strike, expiry ORDER BY datetime ROWS BETWEEN 9 PRECEDING AND CURRENT ROW) AS iv_ma10,
+            AVG(iv_proxy)  OVER (PARTITION BY strike, expiry ORDER BY datetime ROWS BETWEEN 19 PRECEDING AND CURRENT ROW) AS iv_ma20,
+            0 AS iv_std20, -- SQLite lacks native STDDEV
+            AVG(total_oi)    OVER (PARTITION BY strike, expiry ORDER BY datetime ROWS BETWEEN 4 PRECEDING AND CURRENT ROW)  AS oi_ma5,
+            AVG(total_volume) OVER (PARTITION BY strike, expiry ORDER BY datetime ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS vol_ma5,
             spot_close
         FROM options_enriched
-        WINDOW
-            w5  AS (PARTITION BY strike, expiry ORDER BY datetime ROWS BETWEEN 4 PRECEDING AND CURRENT ROW),
-            w10 AS (PARTITION BY strike, expiry ORDER BY datetime ROWS BETWEEN 9 PRECEDING AND CURRENT ROW),
-            w20 AS (PARTITION BY strike, expiry ORDER BY datetime ROWS BETWEEN 19 PRECEDING AND CURRENT ROW)
     """,
 
     # (f) Anomaly flags snapshot

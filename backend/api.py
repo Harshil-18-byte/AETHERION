@@ -176,7 +176,7 @@ async def get_volume_profile(current_user: DBUser = Depends(get_current_user)):
     return service.get_volume_profile()
 
 @app.post("/pricer", tags=["Analytics"])
-async def calulate_option_price(req: PricerRequest):
+async def calculate_option_price(req: PricerRequest):
     """Calculate theoretical option prices and Greeks using BSM on the fly."""
     df = pd.DataFrame([{
         "spot_close": req.spot,

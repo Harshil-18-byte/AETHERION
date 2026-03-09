@@ -19,7 +19,7 @@ def run_timeseries_analysis() -> dict:
         SELECT
             expiry,
             datetime(
-                strftime('%s', datetime) - (strftime('%s', datetime) % 300),
+                (unixepoch(datetime) / 300) * 300,
                 'unixepoch'
             ) AS bucket,
             AVG(iv_proxy) AS avg_iv,

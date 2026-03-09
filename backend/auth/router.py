@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta
-from typing import List
+from typing import List, Optional
 
 from db.sqlite import get_db, User as DBUser, SavedLayout as DBLayout
 from auth.utils import verify_password, get_password_hash, create_access_token, SECRET_KEY, ALGORITHM
