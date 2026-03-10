@@ -29,12 +29,14 @@ def load_csv_to_duckdb() -> int:
         
         # Load via Pandas since SQLite doesn't have native read_csv_auto
         df = pd.read_csv(fpath)
+        df.columns = df.columns.str.lower()
         
         # Ensure column names match schema (lowercase might be needed but DuckDB schema was camelCase/snake)
         # Actually our schema.py uses the exact CSV column names.
         
-        # Write to SQLite
-        df.to_sql("options_raw", conn.conn, if_exists="append", index=False)
+        # Write to PostgreSQL using SQLAlchemy engine
+        from db.postgres import engine
+        df.to_sql("options_raw", engine, if_exists="append", index=False)
         
         count = len(df)
         total_rows += count

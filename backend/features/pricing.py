@@ -74,15 +74,15 @@ def calculate_greeks(df: pd.DataFrame, risk_free_rate: float = 0.05) -> pd.DataF
         return np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
 
     # Assign to dataframe
-    df['bs_theo_CE'] = safe_nan(theo_ce)
-    df['bs_theo_PE'] = safe_nan(theo_pe)
-    df['bs_delta_CE'] = safe_nan(delta_ce)
-    df['bs_delta_PE'] = safe_nan(delta_pe)
+    df['bs_theo_ce'] = safe_nan(theo_ce)
+    df['bs_theo_pe'] = safe_nan(theo_pe)
+    df['bs_delta_ce'] = safe_nan(delta_ce)
+    df['bs_delta_pe'] = safe_nan(delta_pe)
     df['bs_gamma'] = safe_nan(gamma)
     df['bs_vega'] = safe_nan(vega)
-    df['bs_theta_CE'] = safe_nan(theta_ce)
-    df['bs_theta_PE'] = safe_nan(theta_pe)
-    df['bs_rho_CE'] = safe_nan(rho_ce)
-    df['bs_rho_PE'] = safe_nan(rho_pe)
+    df['bs_theta_ce'] = safe_nan(theta_ce)
+    df['bs_theta_pe'] = safe_nan(theta_pe)
+    df['bs_rho_ce'] = safe_nan(rho_ce)
+    df['bs_rho_pe'] = safe_nan(rho_pe)
 
     return df

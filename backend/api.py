@@ -24,14 +24,8 @@ from main import initialize
 from services.analytics_service import AnalyticsService
 from features.pricing import calculate_greeks
 from auth.router import router as auth_router, get_current_user, User as AuthUser
-from db.sqlite import init_db, get_db, User as DBUser
+from db.postgres import init_db, get_db, User as DBUser
 import pandas as pd
-
-# Initialize the full backend pipeline
-service: AnalyticsService = initialize()
-
-# Initialize SQLite DB
-init_db()
 
 app = FastAPI(
     title="OptiX API",
@@ -42,11 +36,27 @@ app = FastAPI(
 # CORS for frontend integration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Global service instance
+service: Optional[AnalyticsService] = None
+
+async def run_init():
+    global service
+    print("[API] Starting background initialization...")
+    service = await asyncio.to_thread(initialize)
+    print("[API] Background initialization complete.")
+
+@app.on_event("startup")
+async def startup_event():
+    # Initialize SQLite DB (this is fast)
+    init_db()
+    # Start the long-running pipeline in background
+    asyncio.create_task(run_init())
 
 # Include Auth Router
 app.include_router(auth_router)
@@ -115,21 +125,29 @@ async def root():
 @app.get("/summary", response_model=MarketSummary, tags=["Analytics"])
 async def get_summary():
     """Get overall market snapshot."""
+    if service is None:
+        raise HTTPException(status_code=533, detail="Engine initializing...")
     return service.get_market_summary()
 
 @app.get("/insights", response_model=InsightsResponse, tags=["Analytics"])
 async def get_insights(current_user: DBUser = Depends(get_current_user)):
     """Get ML-generated insights and alerts."""
+    if service is None:
+        raise HTTPException(status_code=533, detail="Engine initializing...")
     return service.get_insights()
 
 @app.get("/expiries", response_model=List[str], tags=["Metadata"])
 async def get_expiries():
     """List available option expiry dates."""
+    if service is None:
+        return []
     return service.get_expiries()
 
 @app.get("/strikes", response_model=List[float], tags=["Metadata"])
 async def get_strikes():
     """List all unique strike prices."""
+    if service is None:
+        return []
     return service.get_strikes()
 
 @app.get("/analysis", tags=["Analytics"])
@@ -138,6 +156,8 @@ async def get_full_analysis(
     current_user: DBUser = Depends(get_current_user)
 ):
     """Aggregate all analytics for a specific expiry (or latest)."""
+    if service is None:
+         raise HTTPException(status_code=533, detail="Engine initializing...")
     expiries = service.get_expiries()
     selected_expiry = expiry if expiry else (expiries[-1] if expiries else None)
     
@@ -156,6 +176,8 @@ async def get_chain(
     current_user: DBUser = Depends(get_current_user)
 ):
     """Get enriched option chain with ML filters."""
+    if service is None:
+         return []
     df = service.get_options_chain(timestamp, expiry)
     return df.to_dict(orient="records")
 
@@ -168,11 +190,15 @@ async def get_greek_surface(
     if greek not in ["implied_vol", "delta", "gamma", "vega", "theta", "vanna", "charm"]:
         raise HTTPException(status_code=400, detail="Invalid greek requested")
     
+    if service is None:
+         raise HTTPException(status_code=533, detail="Engine initializing...")
     return service.get_greek_surface(greek)
 
 @app.get("/volume/profile", tags=["Analytics"])
 async def get_volume_profile(current_user: DBUser = Depends(get_current_user)):
     """Get volume and Open Interest profile by strike."""
+    if service is None:
+         raise HTTPException(status_code=533, detail="Engine initializing...")
     return service.get_volume_profile()
 
 @app.post("/pricer", tags=["Analytics"])
@@ -189,20 +215,20 @@ async def calculate_option_price(req: PricerRequest):
     
     return {
         "call": {
-            "theo_price": row["bs_theo_CE"],
-            "delta": row["bs_delta_CE"],
+            "theo_price": row["bs_theo_ce"],
+            "delta": row["bs_delta_ce"],
             "gamma": row["bs_gamma"],
             "vega": row["bs_vega"],
-            "theta": row["bs_theta_CE"],
-            "rho": row["bs_rho_CE"]
+            "theta": row["bs_theta_ce"],
+            "rho": row["bs_rho_ce"]
         },
         "put": {
-            "theo_price": row["bs_theo_PE"],
-            "delta": row["bs_delta_PE"],
+            "theo_price": row["bs_theo_pe"],
+            "delta": row["bs_delta_pe"],
             "gamma": row["bs_gamma"],
             "vega": row["bs_vega"],
-            "theta": row["bs_theta_PE"],
-            "rho": row["bs_rho_PE"]
+            "theta": row["bs_theta_pe"],
+            "rho": row["bs_rho_pe"]
         }
     }
 

@@ -57,6 +57,17 @@ def initialize() -> AnalyticsService:
     print("=" * 56)
     print("")
 
+    # Step 0: Check DB Connection
+    print("[0/7] Checking PostgreSQL connection...")
+    try:
+        from db.connection import get_connection
+        conn = get_connection()
+        conn.execute("SELECT 1")
+        print("  ✅ PostgreSQL connection successful.")
+    except Exception as e:
+        print(f"  ❌ PostgreSQL connection failed: {e}")
+        raise RuntimeError(f"Database unavailable: {e}")
+
     # Step 1: Schema
     print("[1/7] Creating schema...")
     create_schema()

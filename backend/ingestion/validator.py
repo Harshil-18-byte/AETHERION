@@ -49,8 +49,8 @@ def validate_data() -> dict:
             SELECT datetime, strike, expiry, COUNT(*) AS cnt
             FROM options_raw
             GROUP BY datetime, strike, expiry
-            HAVING cnt > 1
-        )
+            HAVING COUNT(*) > 1
+        ) AS sub
     """).fetchone()[0]
     if dup_count > 0:
         issues.append(f"Duplicate (datetime, strike, expiry) combos: {dup_count:,}")

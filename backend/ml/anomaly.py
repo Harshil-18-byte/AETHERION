@@ -29,18 +29,24 @@ def run_anomaly_detection() -> dict:
 
     # ── Pull feature matrix ──────────────────────────────────────
     df = conn.execute("""
-        SELECT rowid, volume_CE, volume_PE, oi_CE, oi_PE,
+        SELECT id, volume_ce, volume_pe, oi_ce, oi_pe,
                iv_proxy, total_volume, total_oi,
                relative_volume, oi_change_pct, volume_change_pct
         FROM options_enriched
     """).df()
+
+    # Cast decimals to float for scikit-learn
+    numeric_cols = ["volume_ce", "volume_pe", "oi_ce", "oi_pe", "iv_proxy", "total_volume", "total_oi", "relative_volume", "oi_change_pct", "volume_change_pct"]
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = df[col].astype(float)
 
     if len(df) < 20:
         print("[ANOMALY] Not enough data for anomaly detection, skipping")
         return {"total": 0, "iso_forest": 0, "z_score": 0}
 
     feature_cols = [
-        "volume_CE", "volume_PE", "oi_CE", "oi_PE",
+        "volume_ce", "volume_pe", "oi_ce", "oi_pe",
         "iv_proxy", "relative_volume",
     ]
     X = df[feature_cols].fillna(0).values
@@ -92,7 +98,7 @@ def run_anomaly_detection() -> dict:
     ).round(4)
 
     # ── Write back to DuckDB ─────────────────────────────────────
-    update_df = df[["rowid", "anomaly_flag", "anomaly_score", "unusual_activity_score"]]
+    update_df = df[["id", "anomaly_flag", "anomaly_score", "unusual_activity_score"]]
 
     # Register as a temporary table, then UPDATE via join
     conn.register("_anomaly_results", update_df)
@@ -102,7 +108,7 @@ def run_anomaly_detection() -> dict:
             anomaly_score = ar.anomaly_score,
             unusual_activity_score = ar.unusual_activity_score
         FROM _anomaly_results ar
-        WHERE options_enriched.rowid = ar.rowid
+        WHERE options_enriched.id = ar.id
     """)
     conn.unregister("_anomaly_results")
 

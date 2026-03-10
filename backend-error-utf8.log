@@ -1,0 +1,93 @@
+
+========================================================
+  OptiX Backend -- Initialization
+========================================================
+
+[0/7] Checking PostgreSQL connection...
+[DB] Connected to PostgreSQL (localhost)
+  ✅ PostgreSQL connection successful.
+[1/7] Creating schema...
+[SCHEMA] Tables and indexes created ✅
+[2/7] Loading CSV data...
+Traceback (most recent call last):
+  File "j:\Dev\projects\GammaLens-main\backend\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 2125, in _exec_insertmany_context
+    dialect.do_execute(
+  File "j:\Dev\projects\GammaLens-main\backend\.venv\Lib\site-packages\sqlalchemy\engine\default.py", line 952, in do_execute
+    cursor.execute(statement, parameters)
+psycopg2.errors.UndefinedColumn: column "CE" of relation "options_raw" does not exist
+LINE 1: ...NSERT INTO options_raw (symbol, datetime, expiry, "CE", "PE"...
+                                                             ^
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "j:\Dev\projects\GammaLens-main\backend\.venv\Lib\site-packages\pandas\io\sql.py", line 1679, in execute
+    return execute_function(sql, *args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "j:\Dev\projects\GammaLens-main\backend\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1419, in execute
+    return meth(
+           ^^^^^
+  File "j:\Dev\projects\GammaLens-main\backend\.venv\Lib\site-packages\sqlalchemy\sql\elements.py", line 527, in _execute_on_connection
+    return connection._execute_clauseelement(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "j:\Dev\projects\GammaLens-main\backend\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1641, in _execute_clauseelement
+    ret = self._execute_context(
+          ^^^^^^^^^^^^^^^^^^^^^^
+  File "j:\Dev\projects\GammaLens-main\backend\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1844, in _execute_context
+    return self._exec_insertmany_context(dialect, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "j:\Dev\projects\GammaLens-main\backend\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 2133, in _exec_insertmany_context
+    self._handle_dbapi_exception(
+  File "j:\Dev\projects\GammaLens-main\backend\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 2363, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "j:\Dev\projects\GammaLens-main\backend\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 2125, in _exec_insertmany_context
+    dialect.do_execute(
+  File "j:\Dev\projects\GammaLens-main\backend\.venv\Lib\site-packages\sqlalchemy\engine\default.py", line 952, in do_execute
+    cursor.execute(statement, parameters)
+sqlalchemy.exc.ProgrammingError: (psycopg2.errors.UndefinedColumn) column "CE" of relation "options_raw" does not exist
+LINE 1: ...NSERT INTO options_raw (symbol, datetime, expiry, "CE", "PE"...
+                                                             ^
+
+[SQL: INSERT INTO options_raw (symbol, datetime, expiry, "CE", "PE", spot_close, "ATM", strike, "oi_CE", "oi_PE", "volume_CE", "volume_PE") VALUES (%(symbol__0)s, %(datetime__0)s, %(expiry__0)s, %(CE__0)s, %(PE__0)s, %(spot_close__0)s, %(ATM__0)s, %(strike ... 203469 characters truncated ... ATM__999)s, %(strike__999)s, %(oi_CE__999)s, %(oi_PE__999)s, %(volume_CE__999)s, %(volume_PE__999)s)]
+[parameters: {'oi_PE__0': 2496390, 'expiry__0': '2026-02-17', 'CE__0': 2855.55, 'volume_CE__0': 130, 'datetime__0': '2026-02-10 15:13:00', 'ATM__0': 25950.0, 'oi_CE__0': 65, 'volume_PE__0': 67600, 'strike__0': 23100, 'spot_close__0': 25933.3, 'symbol__0': 'NIFTY', 'PE__0': 2.25, 'oi_PE__1': 178555, 'expiry__1': '2026-02-17', 'CE__1': 2811.3, 'volume_CE__1': 65, 'datetime__1': '2026-02-10 15:12:00', 'ATM__1': 25950.0, 'oi_CE__1': 65, 'volume_PE__1': 1430, 'strike__1': 23150, 'spot_close__1': 25937.85, 'symbol__1': 'NIFTY', 'PE__1': 2.3, 'oi_PE__2': 496015, 'expiry__2': '2026-02-17', 'CE__2': 2756.7, 'volume_CE__2': 130, 'datetime__2': '2026-02-10 15:13:00', 'ATM__2': 25950.0, 'oi_CE__2': 325, 'volume_PE__2': 25350, 'strike__2': 23200, 'spot_close__2': 25933.3, 'symbol__2': 'NIFTY', 'PE__2': 2.45, 'oi_PE__3': 749515, 'expiry__3': '2026-02-17', 'CE__3': 2730.25, 'volume_CE__3': 130, 'datetime__3': '2026-02-10 15:26:00', 'ATM__3': 25900.0, 'oi_CE__3': 325, 'volume_PE__3': 45955, 'strike__3': 23200, 'spot_close__3': 25915.15, 'symbol__3': 'NIFTY', 'PE__3': 2.5, 'oi_PE__4': 233025, 'expiry__4': '2026-02-17' ... 11900 parameters truncated ... 'symbol__995': 'NIFTY', 'PE__995': 15.0, 'oi_PE__996': 465270, 'expiry__996': '2026-02-17', 'CE__996': 714.0, 'volume_CE__996': 65, 'datetime__996': '2026-02-10 13:40:00', 'ATM__996': 25950.0, 'oi_CE__996': 24830, 'volume_PE__996': 2080, 'strike__996': 25250, 'spot_close__996': 25928.1, 'symbol__996': 'NIFTY', 'PE__996': 14.55, 'oi_PE__997': 464490, 'expiry__997': '2026-02-17', 'CE__997': 720.5, 'volume_CE__997': 65, 'datetime__997': '2026-02-10 13:41:00', 'ATM__997': 25900.0, 'oi_CE__997': 24310, 'volume_PE__997': 2600, 'strike__997': 25250, 'spot_close__997': 25924.05, 'symbol__997': 'NIFTY', 'PE__997': 14.8, 'oi_PE__998': 460915, 'expiry__998': '2026-02-17', 'CE__998': 710.15, 'volume_CE__998': 65, 'datetime__998': '2026-02-10 13:44:00', 'ATM__998': 25950.0, 'oi_CE__998': 24310, 'volume_PE__998': 2405, 'strike__998': 25250, 'spot_close__998': 25925.05, 'symbol__998': 'NIFTY', 'PE__998': 14.75, 'oi_PE__999': 460915, 'expiry__999': '2026-02-17', 'CE__999': 713.5, 'volume_CE__999': 65, 'datetime__999': '2026-02-10 13:45:00', 'ATM__999': 25950.0, 'oi_CE__999': 24440, 'volume_PE__999': 1560, 'strike__999': 25250, 'spot_close__999': 25930.35, 'symbol__999': 'NIFTY', 'PE__999': 14.55}]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "j:\Dev\projects\GammaLens-main\backend\main.py", line 132, in <module>
+    svc = initialize()
+          ^^^^^^^^^^^^
+  File "j:\Dev\projects\GammaLens-main\backend\main.py", line 77, in initialize
+    total_rows = load_csv_to_duckdb()
+                 ^^^^^^^^^^^^^^^^^^^^
+  File "J:\Dev\projects\GammaLens-main\backend\ingestion\loader.py", line 38, in load_csv_to_duckdb
+    df.to_sql("options_raw", engine, if_exists="append", index=False)
+  File "j:\Dev\projects\GammaLens-main\backend\.venv\Lib\site-packages\pandas\core\generic.py", line 3052, in to_sql
+    return sql.to_sql(
+           ^^^^^^^^^^^
+  File "j:\Dev\projects\GammaLens-main\backend\.venv\Lib\site-packages\pandas\io\sql.py", line 841, in to_sql
+    return pandas_sql.to_sql(
+           ^^^^^^^^^^^^^^^^^^
+  File "j:\Dev\projects\GammaLens-main\backend\.venv\Lib\site-packages\pandas\io\sql.py", line 2037, in to_sql
+    total_inserted = sql_engine.insert_records(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "j:\Dev\projects\GammaLens-main\backend\.venv\Lib\site-packages\pandas\io\sql.py", line 1571, in insert_records
+    return table.insert(chunksize=chunksize, method=method)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "j:\Dev\projects\GammaLens-main\backend\.venv\Lib\site-packages\pandas\io\sql.py", line 1122, in insert
+    num_inserted = exec_insert(conn, keys, chunk_iter)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "j:\Dev\projects\GammaLens-main\backend\.venv\Lib\site-packages\pandas\io\sql.py", line 1014, in _execute_insert
+    result = self.pd_sql.execute(self.table.insert(), data)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "j:\Dev\projects\GammaLens-main\backend\.venv\Lib\site-packages\pandas\io\sql.py", line 1681, in execute
+    raise DatabaseError(f"Execution failed on sql '{sql}': {exc}") from exc
+pandas.errors.DatabaseError: Execution failed on sql 'INSERT INTO options_raw (symbol, datetime, expiry, "CE", "PE", spot_close, "ATM", strike, "oi_CE", "oi_PE", "volume_CE", "volume_PE") VALUES (:symbol, :datetime, :expiry, :CE, :PE, :spot_close, :ATM, :strike, :oi_CE, :oi_PE, :volume_CE, :volume_PE)': (psycopg2.errors.UndefinedColumn) column "CE" of relation "options_raw" does not exist
+LINE 1: ...NSERT INTO options_raw (symbol, datetime, expiry, "CE", "PE"...
+                                                             ^
+
+[SQL: INSERT INTO options_raw (symbol, datetime, expiry, "CE", "PE", spot_close, "ATM", strike, "oi_CE", "oi_PE", "volume_CE", "volume_PE") VALUES (%(symbol__0)s, %(datetime__0)s, %(expiry__0)s, %(CE__0)s, %(PE__0)s, %(spot_close__0)s, %(ATM__0)s, %(strike ... 203469 characters truncated ... ATM__999)s, %(strike__999)s, %(oi_CE__999)s, %(oi_PE__999)s, %(volume_CE__999)s, %(volume_PE__999)s)]
+[parameters: {'oi_PE__0': 2496390, 'expiry__0': '2026-02-17', 'CE__0': 2855.55, 'volume_CE__0': 130, 'datetime__0': '2026-02-10 15:13:00', 'ATM__0': 25950.0, 'oi_CE__0': 65, 'volume_PE__0': 67600, 'strike__0': 23100, 'spot_close__0': 25933.3, 'symbol__0': 'NIFTY', 'PE__0': 2.25, 'oi_PE__1': 178555, 'expiry__1': '2026-02-17', 'CE__1': 2811.3, 'volume_CE__1': 65, 'datetime__1': '2026-02-10 15:12:00', 'ATM__1': 25950.0, 'oi_CE__1': 65, 'volume_PE__1': 1430, 'strike__1': 23150, 'spot_close__1': 25937.85, 'symbol__1': 'NIFTY', 'PE__1': 2.3, 'oi_PE__2': 496015, 'expiry__2': '2026-02-17', 'CE__2': 2756.7, 'volume_CE__2': 130, 'datetime__2': '2026-02-10 15:13:00', 'ATM__2': 25950.0, 'oi_CE__2': 325, 'volume_PE__2': 25350, 'strike__2': 23200, 'spot_close__2': 25933.3, 'symbol__2': 'NIFTY', 'PE__2': 2.45, 'oi_PE__3': 749515, 'expiry__3': '2026-02-17', 'CE__3': 2730.25, 'volume_CE__3': 130, 'datetime__3': '2026-02-10 15:26:00', 'ATM__3': 25900.0, 'oi_CE__3': 325, 'volume_PE__3': 45955, 'strike__3': 23200, 'spot_close__3': 25915.15, 'symbol__3': 'NIFTY', 'PE__3': 2.5, 'oi_PE__4': 233025, 'expiry__4': '2026-02-17' ... 11900 parameters truncated ... 'symbol__995': 'NIFTY', 'PE__995': 15.0, 'oi_PE__996': 465270, 'expiry__996': '2026-02-17', 'CE__996': 714.0, 'volume_CE__996': 65, 'datetime__996': '2026-02-10 13:40:00', 'ATM__996': 25950.0, 'oi_CE__996': 24830, 'volume_PE__996': 2080, 'strike__996': 25250, 'spot_close__996': 25928.1, 'symbol__996': 'NIFTY', 'PE__996': 14.55, 'oi_PE__997': 464490, 'expiry__997': '2026-02-17', 'CE__997': 720.5, 'volume_CE__997': 65, 'datetime__997': '2026-02-10 13:41:00', 'ATM__997': 25900.0, 'oi_CE__997': 24310, 'volume_PE__997': 2600, 'strike__997': 25250, 'spot_close__997': 25924.05, 'symbol__997': 'NIFTY', 'PE__997': 14.8, 'oi_PE__998': 460915, 'expiry__998': '2026-02-17', 'CE__998': 710.15, 'volume_CE__998': 65, 'datetime__998': '2026-02-10 13:44:00', 'ATM__998': 25950.0, 'oi_CE__998': 24310, 'volume_PE__998': 2405, 'strike__998': 25250, 'spot_close__998': 25925.05, 'symbol__998': 'NIFTY', 'PE__998': 14.75, 'oi_PE__999': 460915, 'expiry__999': '2026-02-17', 'CE__999': 713.5, 'volume_CE__999': 65, 'datetime__999': '2026-02-10 13:45:00', 'ATM__999': 25950.0, 'oi_CE__999': 24440, 'volume_PE__999': 1560, 'strike__999': 25250, 'spot_close__999': 25930.35, 'symbol__999': 'NIFTY', 'PE__999': 14.55}]
+(Background on this error at: https://sqlalche.me/e/20/f405)

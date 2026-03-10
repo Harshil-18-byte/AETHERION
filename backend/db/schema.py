@@ -1,5 +1,5 @@
 """
-Schema definition — tables, indexes, and materialized views.
+Schema definition — tables, indexes, and materialized views for PostgreSQL.
 
 Called once during initialization after data ingestion and feature engineering.
 """
@@ -13,18 +13,19 @@ from db.connection import get_connection
 
 RAW_TABLE_DDL = """
 CREATE TABLE IF NOT EXISTS options_raw (
-    symbol          VARCHAR,
+    id              SERIAL PRIMARY KEY,
+    symbol          VARCHAR(50),
     datetime        TIMESTAMP,
     expiry          DATE,
-    CE              DOUBLE,      -- Call option price
-    PE              DOUBLE,      -- Put option price
-    spot_close      DOUBLE,      -- Underlying (NIFTY) spot price
-    ATM             DOUBLE,      -- ATM strike indicator
-    strike          DOUBLE,      -- Strike price
-    oi_CE           BIGINT,      -- Call open interest
-    oi_PE           BIGINT,      -- Put open interest
-    volume_CE       BIGINT,      -- Call volume
-    volume_PE       BIGINT       -- Put volume
+    CE              DOUBLE PRECISION,
+    PE              DOUBLE PRECISION,
+    spot_close      DOUBLE PRECISION,
+    ATM             DOUBLE PRECISION,
+    strike          DOUBLE PRECISION,
+    oi_CE           BIGINT,
+    oi_PE           BIGINT,
+    volume_CE       BIGINT,
+    volume_PE       BIGINT
 );
 """
 
@@ -36,15 +37,16 @@ CREATE TABLE IF NOT EXISTS options_raw (
 
 ENRICHED_TABLE_DDL = """
 CREATE TABLE IF NOT EXISTS options_enriched (
+    id              SERIAL PRIMARY KEY,
     -- original columns
-    symbol          VARCHAR,
+    symbol          VARCHAR(50),
     datetime        TIMESTAMP,
     expiry          DATE,
-    CE              DOUBLE,
-    PE              DOUBLE,
-    spot_close      DOUBLE,
-    ATM             DOUBLE,
-    strike          DOUBLE,
+    CE              DOUBLE PRECISION,
+    PE              DOUBLE PRECISION,
+    spot_close      DOUBLE PRECISION,
+    ATM             DOUBLE PRECISION,
+    strike          DOUBLE PRECISION,
     oi_CE           BIGINT,
     oi_PE           BIGINT,
     volume_CE       BIGINT,
@@ -55,57 +57,57 @@ CREATE TABLE IF NOT EXISTS options_enriched (
     total_volume    BIGINT,
 
     -- moneyness & position
-    moneyness       DOUBLE,      -- strike / spot_close
-    days_to_expiry  INTEGER,     -- CAST(julianday(expiry) - julianday(datetime) AS INTEGER)
+    moneyness       DOUBLE PRECISION,
+    days_to_expiry  INTEGER,
 
     -- ratios
-    pcr_oi          DOUBLE,      -- oi_PE / oi_CE
-    pcr_volume      DOUBLE,      -- volume_PE / volume_CE
+    pcr_oi          DOUBLE PRECISION,
+    pcr_volume      DOUBLE PRECISION,
 
-    -- changes (vs previous timestamp for same strike+expiry)
+    -- changes
     oi_change_CE    BIGINT,
     oi_change_PE    BIGINT,
-    volume_change_pct DOUBLE,    -- % change in total volume
-    oi_change_pct     DOUBLE,    -- % change in total OI
+    volume_change_pct DOUBLE PRECISION,
+    oi_change_pct     DOUBLE PRECISION,
 
     -- relative metrics
-    relative_volume   DOUBLE,    -- current volume / avg volume
+    relative_volume   DOUBLE PRECISION,
 
     -- IV proxy
-    iv_proxy        DOUBLE,      -- (CE + PE) / spot_close * 100
+    iv_proxy        DOUBLE PRECISION,
 
-    -- IV rank & percentile (rolling)
-    iv_rank         DOUBLE,
-    iv_percentile   DOUBLE,
+    -- IV rank & percentile
+    iv_rank         DOUBLE PRECISION,
+    iv_percentile   DOUBLE PRECISION,
 
     -- greeks proxies
-    gamma_exposure_proxy DOUBLE,
-    cum_delta_proxy      DOUBLE,
+    gamma_exposure_proxy DOUBLE PRECISION,
+    cum_delta_proxy      DOUBLE PRECISION,
 
-    -- black-scholes theoretics and greeks (populated by pricing.py)
-    bs_theo_CE      DOUBLE,
-    bs_theo_PE      DOUBLE,
-    bs_delta_CE     DOUBLE,
-    bs_delta_PE     DOUBLE,
-    bs_gamma        DOUBLE,
-    bs_vega         DOUBLE,
-    bs_theta_CE     DOUBLE,
-    bs_theta_PE     DOUBLE,
-    bs_rho_CE       DOUBLE,
-    bs_rho_PE       DOUBLE,
+    -- black-scholes
+    bs_theo_CE      DOUBLE PRECISION,
+    bs_theo_PE      DOUBLE PRECISION,
+    bs_delta_CE     DOUBLE PRECISION,
+    bs_delta_PE     DOUBLE PRECISION,
+    bs_gamma        DOUBLE PRECISION,
+    bs_vega         DOUBLE PRECISION,
+    bs_theta_CE     DOUBLE PRECISION,
+    bs_theta_PE     DOUBLE PRECISION,
+    bs_rho_CE       DOUBLE PRECISION,
+    bs_rho_PE       DOUBLE PRECISION,
 
-    -- ML labels (populated by ml/ modules)
-    anomaly_flag    INTEGER DEFAULT 0,   -- 1 = anomaly
-    anomaly_score   DOUBLE  DEFAULT 0.0,
+    -- ML labels
+    anomaly_flag    INTEGER DEFAULT 0,
+    anomaly_score   DOUBLE PRECISION  DEFAULT 0.0,
     cluster_kmeans  INTEGER DEFAULT -1,
     cluster_dbscan  INTEGER DEFAULT -1,
-    unusual_activity_score DOUBLE DEFAULT 0.0
+    unusual_activity_score DOUBLE PRECISION DEFAULT 0.0
 );
 """
 
 
 # ═══════════════════════════════════════════════════════════════════
-# 3. INDEXES for common query patterns
+# 3. INDEXES
 # ═══════════════════════════════════════════════════════════════════
 
 INDEXES = [
@@ -122,6 +124,8 @@ INDEXES = [
 def create_schema() -> None:
     """Create raw + enriched tables and indexes."""
     conn = get_connection()
+    conn.execute("DROP TABLE IF EXISTS options_raw CASCADE")
+    conn.execute("DROP TABLE IF EXISTS options_enriched CASCADE")
     conn.execute(RAW_TABLE_DDL)
     conn.execute(ENRICHED_TABLE_DDL)
     for idx_sql in INDEXES:
@@ -130,7 +134,7 @@ def create_schema() -> None:
 
 
 # ═══════════════════════════════════════════════════════════════════
-# 4. MATERIALIZED VIEWS (re-created tables in SQLite)
+# 4. MATERIALIZED VIEWS (re-created as real tables for speed in analytics)
 # ═══════════════════════════════════════════════════════════════════
 
 MATERIALIZED_VIEWS = {
@@ -144,7 +148,7 @@ MATERIALIZED_VIEWS = {
             AVG(iv_proxy)          AS avg_iv,
             MIN(iv_proxy)          AS min_iv,
             MAX(iv_proxy)          AS max_iv,
-            0                      AS std_iv, -- SQLite lacks native STDDEV
+            stddev(iv_proxy)       AS std_iv,
             COUNT(*)               AS obs_count
         FROM options_enriched
         GROUP BY strike, expiry
@@ -170,14 +174,11 @@ MATERIALIZED_VIEWS = {
         JOIN latest l ON e.expiry = l.expiry AND e.datetime = l.max_dt
     """,
 
-    # (c) Volume aggregated across 5-minute windows
+    # (c) Volume timeseries (5-minute buckets)
     "mv_volume_timeseries": """
         CREATE TABLE mv_volume_timeseries AS
         SELECT
-            datetime(
-                (unixepoch(datetime) / 300) * 300,
-                'unixepoch'
-            ) AS bucket,
+            date_trunc('minute', datetime) - (extract(minute from datetime)::int % 5) * interval '1 minute' AS bucket,
             expiry,
             SUM(volume_CE)   AS total_vol_CE,
             SUM(volume_PE)   AS total_vol_PE,
@@ -188,7 +189,7 @@ MATERIALIZED_VIEWS = {
         GROUP BY bucket, expiry
     """,
 
-    # (d) Put-call ratio across strikes
+    # (d) Put-call ratio
     "mv_pcr_by_strike": """
         CREATE TABLE mv_pcr_by_strike AS
         WITH latest AS (
@@ -222,14 +223,14 @@ MATERIALIZED_VIEWS = {
             AVG(iv_proxy)  OVER (PARTITION BY strike, expiry ORDER BY datetime ROWS BETWEEN 4 PRECEDING AND CURRENT ROW)  AS iv_ma5,
             AVG(iv_proxy)  OVER (PARTITION BY strike, expiry ORDER BY datetime ROWS BETWEEN 9 PRECEDING AND CURRENT ROW) AS iv_ma10,
             AVG(iv_proxy)  OVER (PARTITION BY strike, expiry ORDER BY datetime ROWS BETWEEN 19 PRECEDING AND CURRENT ROW) AS iv_ma20,
-            0 AS iv_std20, -- SQLite lacks native STDDEV
+            stddev(iv_proxy) OVER (PARTITION BY strike, expiry ORDER BY datetime ROWS BETWEEN 19 PRECEDING AND CURRENT ROW) AS iv_std20,
             AVG(total_oi)    OVER (PARTITION BY strike, expiry ORDER BY datetime ROWS BETWEEN 4 PRECEDING AND CURRENT ROW)  AS oi_ma5,
             AVG(total_volume) OVER (PARTITION BY strike, expiry ORDER BY datetime ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS vol_ma5,
             spot_close
         FROM options_enriched
     """,
 
-    # (f) Anomaly flags snapshot
+    # (f) Anomaly summary
     "mv_anomaly_summary": """
         CREATE TABLE mv_anomaly_summary AS
         SELECT
@@ -251,7 +252,7 @@ MATERIALIZED_VIEWS = {
            OR unusual_activity_score > 0.5
     """,
 
-    # (g) Max-pain helper
+    # (g) Max Pain
     "mv_max_pain": """
         CREATE TABLE mv_max_pain AS
         WITH latest AS (
@@ -297,7 +298,7 @@ MATERIALIZED_VIEWS = {
 
 
 def create_materialized_views() -> None:
-    """Create (or replace) tables from enriched data (SQLite compatible)."""
+    """Create (or replace) tables from enriched data."""
     conn = get_connection()
     for name, sql in MATERIALIZED_VIEWS.items():
         conn.execute(f"DROP TABLE IF EXISTS {name}")

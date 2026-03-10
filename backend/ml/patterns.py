@@ -53,6 +53,11 @@ def run_pattern_detection() -> dict:
         SELECT * FROM bucketed ORDER BY expiry, bucket
     """).df()
 
+    # Cast decimals to float
+    for col in ["avg_iv"]:
+        if col in smile_data.columns:
+            smile_data[col] = smile_data[col].astype(float)
+
     smile_results = []
     for exp in smile_data["expiry"].unique():
         exp_data = smile_data[smile_data["expiry"] == exp]
@@ -105,7 +110,7 @@ def run_pattern_detection() -> dict:
             FROM options_enriched GROUP BY expiry
         ),
         snapshot AS (
-            SELECT e.strike, e.expiry, e.oi_CE, e.oi_PE, e.spot_close,
+            SELECT e.strike, e.expiry, e.oi_ce, e.oi_pe, e.spot_close,
                    e.total_oi
             FROM options_enriched e
             JOIN latest l ON e.expiry = l.expiry AND e.datetime = l.max_dt
@@ -116,12 +121,17 @@ def run_pattern_detection() -> dict:
                    ROW_NUMBER() OVER (PARTITION BY expiry ORDER BY oi_PE DESC) AS pe_rank
             FROM snapshot
         )
-        SELECT strike, expiry, oi_CE, oi_PE, total_oi, spot_close,
+        SELECT strike, expiry, oi_ce, oi_pe, total_oi, spot_close,
                ce_rank, pe_rank
         FROM ranked
         WHERE ce_rank <= 5 OR pe_rank <= 5
         ORDER BY expiry, strike
     """).df()
+
+    # Cast decimals to float
+    for col in ["oi_ce", "oi_pe", "total_oi", "spot_close"]:
+        if col in sr_levels.columns:
+            sr_levels[col] = sr_levels[col].astype(float)
 
     support_resistance = []
     for exp in sr_levels["expiry"].unique():
@@ -129,12 +139,12 @@ def run_pattern_detection() -> dict:
         spot = exp_data["spot_close"].iloc[0]
 
         # Top call OI = resistance levels
-        top_calls = exp_data.nsmallest(3, "ce_rank")[["strike", "oi_CE"]].to_dict("records")
+        top_calls = exp_data.nsmallest(3, "ce_rank")[["strike", "oi_ce"]].to_dict("records")
         # Top put OI = support levels
-        top_puts = exp_data.nsmallest(3, "pe_rank")[["strike", "oi_PE"]].to_dict("records")
+        top_puts = exp_data.nsmallest(3, "pe_rank")[["strike", "oi_pe"]].to_dict("records")
 
-        resistance = [{"strike": float(r["strike"]), "oi": int(r["oi_CE"])} for r in top_calls]
-        support = [{"strike": float(r["strike"]), "oi": int(r["oi_PE"])} for r in top_puts]
+        resistance = [{"strike": float(r["strike"]), "oi": int(r["oi_ce"])} for r in top_calls]
+        support = [{"strike": float(r["strike"]), "oi": int(r["oi_pe"])} for r in top_puts]
 
         support_resistance.append({
             "expiry": str(exp)[:10],
@@ -153,7 +163,7 @@ def run_pattern_detection() -> dict:
             GROUP BY expiry
         ),
         chain AS (
-            SELECT e.strike, e.expiry, e.oi_CE, e.oi_PE
+            SELECT e.strike, e.expiry, e.oi_ce, e.oi_pe
             FROM options_enriched e
             JOIN latest l ON e.expiry = l.expiry AND e.datetime = l.max_dt
         ),
@@ -166,21 +176,21 @@ def run_pattern_detection() -> dict:
                 s.settlement AS settlement_price,
                 SUM(
                     CASE WHEN s.settlement > c.strike
-                         THEN (s.settlement - c.strike) * c.oi_CE
+                         THEN (s.settlement - c.strike) * c.oi_ce
                          ELSE 0 END
                 ) + SUM(
                     CASE WHEN s.settlement < c.strike
-                         THEN (c.strike - s.settlement) * c.oi_PE
+                         THEN (c.strike - s.settlement) * c.oi_pe
                          ELSE 0 END
                 ) AS total_liability
             FROM chain c
             CROSS JOIN all_strikes s
             GROUP BY c.expiry, s.settlement
         )
-        SELECT expiry, settlement_price AS max_pain_strike, MIN(total_liability) AS min_total_liability
+        SELECT DISTINCT ON (expiry)
+               expiry, settlement_price AS max_pain_strike, total_liability AS min_total_liability
         FROM liabilities
-        GROUP BY expiry
-        ORDER BY expiry
+        ORDER BY expiry, total_liability ASC
     """).df()
 
     max_pain_list = []

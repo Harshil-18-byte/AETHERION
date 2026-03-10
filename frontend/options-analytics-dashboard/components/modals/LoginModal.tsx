@@ -22,24 +22,14 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSwitc
     setError('');
     
     try {
-      const formData = new FormData();
-      formData.append('username', email);
-      formData.append('password', password);
-
-      const response = await fetch('http://localhost:8000/auth/login', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        await login(data.access_token);
-        onClose();
+      await login(email, password);
+      onClose();
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
       } else {
-        setError('Invalid email or password');
+        setError('Connection failed. Please try again.');
       }
-    } catch (err) {
-      setError('Connection failed. Please try again.');
     }
   };
 
@@ -80,7 +70,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSwitc
         </form>
         
         <div className="mt-6 text-center text-sm">
-          <span className="text-gray-400">Don't have an account? </span>
+          <span className="text-gray-400">Don&apos;t have an account? </span>
           <button onClick={onSwitchToRegister} className="text-blue-400 hover:underline">Register</button>
         </div>
         

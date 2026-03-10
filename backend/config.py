@@ -7,13 +7,29 @@ e.g.  OPTIX_DUCKDB_PATH=./prod.duckdb
 
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load explicitly to ensure .env defaults override
+load_dotenv()
 
 # ── Paths ────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parent.parent          # CodeForge/
 BACKEND_ROOT = Path(__file__).resolve().parent                 # CodeForge/backend/
 
-# SQLite Analytics: use ":memory:" for ephemeral or a file for persistence
-ANALYTICS_DB_PATH: str = os.getenv("OPTIX_ANALYTICS_DB_PATH", "./optix.db")
+# ── Database Connections ─────────────────────────────────────────
+
+# PostgreSQL Connection
+POSTGRES_USER: str = os.getenv("OPTIX_POSTGRES_USER", "user")
+POSTGRES_PASSWORD: str = os.getenv("OPTIX_POSTGRES_PASSWORD", "password")
+POSTGRES_DB: str = os.getenv("OPTIX_POSTGRES_DB", "optix")
+POSTGRES_HOST: str = os.getenv("OPTIX_POSTGRES_HOST", "db")
+POSTGRES_PORT: str = os.getenv("OPTIX_POSTGRES_PORT", "5432")
+
+# DATABASE_URL for SQLAlchemy
+DATABASE_URL: str = os.getenv(
+    "OPTIX_DATABASE_URL",
+    f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+)
 
 # CSV data directory (contains the *_exp.csv files)
 CSV_DATA_DIR: str = os.getenv(

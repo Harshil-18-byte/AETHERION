@@ -14,7 +14,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({ isOpen, onClose, o
   const [fullName, setFullName] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const { login } = useAuth();
+  const { signup } = useAuth();
 
   if (!isOpen) return null;
 
@@ -23,34 +23,14 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({ isOpen, onClose, o
     setError('');
     
     try {
-      const response = await fetch('http://localhost:8000/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, full_name: fullName, password }),
-      });
-
-      if (response.ok) {
-        // Automatically login after registration
-        const formData = new FormData();
-        formData.append('username', email);
-        formData.append('password', password);
-
-        const loginRes = await fetch('http://localhost:8000/auth/login', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (loginRes.ok) {
-          const loginData = await loginRes.json();
-          await login(loginData.access_token);
-          onClose();
-        }
+      await signup(fullName, email, password);
+      onClose();
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
       } else {
-        const data = await response.json();
-        setError(data.detail || 'Registration failed');
+        setError('Connection failed. Please try again.');
       }
-    } catch (err) {
-      setError('Connection failed. Please try again.');
     }
   };
 

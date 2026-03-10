@@ -17,7 +17,19 @@ class QueryLayer:
 
     def _q(self, sql: str, params: list | None = None) -> pd.DataFrame:
         """Execute SQL and return DataFrame."""
-        return self.conn.execute(sql, params).df()
+        df = self.conn.execute(sql, params).df()
+        rename_map = {
+            "ce": "CE", "pe": "PE", "atm": "ATM",
+            "oi_ce": "oi_CE", "oi_pe": "oi_PE",
+            "volume_ce": "volume_CE", "volume_pe": "volume_PE",
+            "oi_change_ce": "oi_change_CE", "oi_change_pe": "oi_change_PE",
+            "bs_theo_ce": "bs_theo_CE", "bs_theo_pe": "bs_theo_PE",
+            "bs_delta_ce": "bs_delta_CE", "bs_delta_pe": "bs_delta_PE",
+            "bs_theta_ce": "bs_theta_CE", "bs_theta_pe": "bs_theta_PE",
+            "bs_rho_ce": "bs_rho_CE", "bs_rho_pe": "bs_rho_PE",
+            "gamma_exposure_proxy": "gamma_exposure_proxy"
+        }
+        return df.rename(columns=rename_map)
 
     def get_options_chain(self, timestamp: str | None = None,
                           expiry: str | None = None) -> pd.DataFrame:
@@ -145,8 +157,8 @@ class QueryLayer:
         where = f"WHERE expiry = '{expiry}'" if expiry else ""
         return self._q(f"""
             SELECT datetime,
-                   CAST(SUM(oi_PE) AS DOUBLE) / NULLIF(SUM(oi_CE), 0) AS pcr_oi,
-                   CAST(SUM(volume_PE) AS DOUBLE) / NULLIF(SUM(volume_CE), 0) AS pcr_volume,
+                   CAST(SUM(oi_pe) AS DOUBLE PRECISION) / NULLIF(SUM(oi_ce), 0) AS pcr_oi,
+                   CAST(SUM(volume_pe) AS DOUBLE PRECISION) / NULLIF(SUM(volume_ce), 0) AS pcr_volume,
                    SUM(total_oi) AS total_oi,
                    SUM(total_volume) AS total_volume,
                    AVG(spot_close) AS spot_close

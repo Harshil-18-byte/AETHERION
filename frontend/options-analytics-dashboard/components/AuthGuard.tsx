@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, usePathname } from "next/navigation";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth, BYPASS_AUTH } from "@/contexts/AuthContext";
 import React, { useEffect } from "react";
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
@@ -11,13 +11,15 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // If auth state has loaded and user is not authenticated, redirect to login
-    if (!isLoading && !isAuthenticated) {
+    if (!isLoading && !isAuthenticated && !BYPASS_AUTH) {
       // Allow access to auth pages
       if (pathname !== "/login" && pathname !== "/signup") {
         router.push("/login");
       }
     }
   }, [isAuthenticated, isLoading, router, pathname]);
+
+  if (BYPASS_AUTH) return <>{children}</>;
 
   // Show nothing while loading to prevent flash of content before redirect
   if (isLoading) {

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from datetime import timedelta
 from typing import List, Optional
 
-from db.sqlite import get_db, User as DBUser, SavedLayout as DBLayout
+from db.postgres import get_db, User as DBUser, SavedLayout as DBLayout
 from auth.utils import verify_password, get_password_hash, create_access_token, SECRET_KEY, ALGORITHM
 from jose import jwt, JWTError
 from pydantic import BaseModel, EmailStr
@@ -37,6 +37,19 @@ class TokenData(BaseModel):
 
 # Dependency to get current user
 async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    # --- TEMPORARY BYPASS ---
+    BYPASS_AUTH = True
+    if BYPASS_AUTH:
+        # Accept dummy token OR any token from the header for testing
+        user = db.query(DBUser).filter(DBUser.email == "dev@example.com").first()
+        if not user:
+            user = DBUser(email="dev@example.com", full_name="Mock User", hashed_password="mask_password")
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+        return user
+    # ------------------------
+
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -60,7 +73,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
 def register_user(user: UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(DBUser).filter(DBUser.email == user.email).first()
     if db_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        return db_user # Return existing user as per "any login is okay"
     
     hashed_password = get_password_hash(user.password)
     new_user = DBUser(
@@ -75,13 +88,18 @@ def register_user(user: UserCreate, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=Token)
 def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    # Making any login work as per user request
     user = db.query(DBUser).filter(DBUser.email == form_data.username).first()
-    if not user or not verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"},
+    if not user:
+        # Auto-register if user doesn't exist
+        user = DBUser(
+            email=form_data.username,
+            hashed_password=get_password_hash(form_data.password),
+            full_name="Auto User"
         )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
     
     access_token = create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer"}

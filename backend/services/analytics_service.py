@@ -55,7 +55,7 @@ class AnalyticsService:
             return conn.execute("""
                 SELECT strike, expiry, iv_proxy AS avg_iv, moneyness
                 FROM options_enriched
-                WHERE datetime = ?::TIMESTAMP
+                WHERE datetime = %s::TIMESTAMP
                 ORDER BY expiry, strike
             """, [timestamp]).df()
         return self._ql.get_volatility_surface(expiry_date)
@@ -95,7 +95,7 @@ class AnalyticsService:
         conn = get_connection()
 
         if timestamp:
-            where = f"WHERE datetime = '{timestamp}'::TIMESTAMP"
+            where = f"WHERE datetime = '{timestamp}'"
         else:
             where = "WHERE datetime = (SELECT MAX(datetime) FROM options_enriched)"
 
@@ -105,7 +105,7 @@ class AnalyticsService:
                 AVG(iv_proxy)       AS avg_iv,
                 SUM(total_oi)       AS total_oi,
                 SUM(total_volume)   AS total_volume,
-                SUM(oi_PE)::DOUBLE / NULLIF(SUM(oi_CE), 0) AS overall_pcr,
+                CAST(SUM(oi_pe) AS DOUBLE PRECISION) / NULLIF(SUM(oi_ce), 0) AS overall_pcr,
                 SUM(CASE WHEN anomaly_flag = 1 THEN 1 ELSE 0 END) AS n_anomalies,
                 COUNT(DISTINCT expiry)  AS n_expiries,
                 COUNT(DISTINCT strike)  AS n_strikes,
@@ -279,8 +279,8 @@ class AnalyticsService:
         for _, row in chain_df.iterrows():
             gex_data.append({
                 "strike": float(row["strike"]),
-                "call_gex": float(row["gamma_exposure_proxy"]) if row["oi_CE"] > row["oi_PE"] else 0,
-                "put_gex": float(-row["gamma_exposure_proxy"]) if row["oi_PE"] > row["oi_CE"] else 0,
+                "call_gex": float(row["gamma_exposure_proxy"]) if row["oi_ce"] > row["oi_pe"] else 0,
+                "put_gex": float(-row["gamma_exposure_proxy"]) if row["oi_pe"] > row["oi_ce"] else 0,
                 "net_gex": float(row["gamma_exposure_proxy"]) if row.get("gamma_exposure_proxy") else 0,
                 "iv_ce": float(row["iv_proxy"]),
                 "iv_pe": float(row["iv_proxy"])
@@ -298,18 +298,18 @@ class AnalyticsService:
                 flip_level = item["strike"]
 
         # 3. Flow Pressure
-        total_cv = float(chain_df["volume_CE"].sum())
-        total_pv = float(chain_df["volume_PE"].sum())
+        total_cv = float(chain_df["volume_ce"].sum())
+        total_pv = float(chain_df["volume_pe"].sum())
         total_v = total_cv + total_pv
         pressure = (total_cv - total_pv) / total_v if total_v > 0 else 0
         flow_by_strike = []
         for _, row in chain_df.iterrows():
-            tv = row["volume_CE"] + row["volume_PE"]
+            tv = row["volume_ce"] + row["volume_pe"]
             flow_by_strike.append({
                 "strike": float(row["strike"]),
-                "call_volume": int(row["volume_CE"]),
-                "put_volume": int(row["volume_PE"]),
-                "strike_pressure": float((row["volume_CE"] - row["volume_PE"]) / tv) if tv > 0 else 0
+                "call_volume": int(row["volume_ce"]),
+                "put_volume": int(row["volume_pe"]),
+                "strike_pressure": float((row["volume_ce"] - row["volume_pe"]) / tv) if tv > 0 else 0
             })
 
         # 4. Vol Regime
@@ -324,8 +324,8 @@ class AnalyticsService:
                 "strike": float(row["strike"]),
                 "total_oi": int(row["total_oi"]),
                 "total_volume": int(row["total_volume"]),
-                "call_oi": int(row["oi_CE"]),
-                "put_oi": int(row["oi_PE"]),
+                "call_oi": int(row["oi_ce"]),
+                "put_oi": int(row["oi_pe"]),
                 "liquidity_score": float(row["total_oi"] / (chain_df["total_oi"].max() or 1))
             })
 

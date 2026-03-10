@@ -26,12 +26,18 @@ def run_clustering() -> dict:
             SELECT expiry, MAX(datetime) AS max_dt
             FROM options_enriched GROUP BY expiry
         )
-        SELECT e.rowid, e.strike, e.expiry, e.total_volume, e.total_oi,
+        SELECT e.id, e.strike, e.expiry, e.total_volume, e.total_oi,
                e.iv_proxy, e.moneyness, e.days_to_expiry,
                e.relative_volume, e.pcr_oi
         FROM options_enriched e
         JOIN latest l ON e.expiry = l.expiry AND e.datetime = l.max_dt
     """).df()
+
+    # Cast decimals to float
+    numeric_cols = ["total_volume", "total_oi", "iv_proxy", "moneyness", "days_to_expiry", "relative_volume", "pcr_oi"]
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = df[col].astype(float)
 
     if len(df) < KMEANS_N_CLUSTERS:
         print("[CLUSTER] Not enough data for clustering, skipping")

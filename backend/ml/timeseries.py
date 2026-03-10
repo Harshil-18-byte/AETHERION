@@ -18,10 +18,7 @@ def run_timeseries_analysis() -> dict:
     bucket_data = conn.execute("""
         SELECT
             expiry,
-            datetime(
-                (unixepoch(datetime) / 300) * 300,
-                'unixepoch'
-            ) AS bucket,
+            date_trunc('minute', datetime) - (extract(minute from datetime)::int % 5) * interval '1 minute' AS bucket,
             AVG(iv_proxy) AS avg_iv,
             SUM(total_oi) AS total_oi,
             SUM(total_volume) AS total_vol
@@ -29,6 +26,11 @@ def run_timeseries_analysis() -> dict:
         GROUP BY expiry, bucket
         ORDER BY expiry, bucket
     """).df()
+    
+    # Cast decimals/numeric to float for numpy compatibility
+    for col in ["avg_iv", "total_oi", "total_vol"]:
+        if col in bucket_data.columns:
+            bucket_data[col] = bucket_data[col].astype(float)
 
     if len(bucket_data) < 5:
         print("[TIMESERIES] Not enough data for time-series analysis, skipping")
