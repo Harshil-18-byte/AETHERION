@@ -5,7 +5,7 @@ from db.connection import get_connection
 from config import CSV_DATA_DIR
 
 
-def load_csv_to_duckdb() -> int:
+def load_csv_to_sqlite() -> int:
     """
     Scan CSV_DATA_DIR for *_exp.csv files and load them into options_raw.
     Returns the total number of rows loaded.
@@ -31,10 +31,7 @@ def load_csv_to_duckdb() -> int:
         df = pd.read_csv(fpath)
         df.columns = df.columns.str.lower()
         
-        # Ensure column names match schema (lowercase might be needed but DuckDB schema was camelCase/snake)
-        # Actually our schema.py uses the exact CSV column names.
-        
-        # Write to PostgreSQL using SQLAlchemy engine
+        # Write to SQLite using SQLAlchemy engine
         from db.postgres import engine
         df.to_sql("options_raw", engine, if_exists="append", index=False)
         

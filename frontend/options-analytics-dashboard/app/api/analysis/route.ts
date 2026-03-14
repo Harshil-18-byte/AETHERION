@@ -62,15 +62,15 @@ export async function POST(request: NextRequest) {
         symbol: raw.symbol || "UNKNOWN",
         datetime: raw.datetime || "",
         expiry: raw.expiry || "",
-        CE: parseFloat(raw.CE) || 0,
-        PE: parseFloat(raw.PE) || 0,
+        ce: parseFloat(raw.ce) || 0,
+        pe: parseFloat(raw.pe) || 0,
         spot_close: parseFloat(raw.spot_close) || 0,
-        ATM: parseFloat(raw.ATM) || 0,
+        atm: parseFloat(raw.atm) || 0,
         strike: parseFloat(raw.strike) || 0,
-        oi_CE: parseFloat(raw.oi_CE) || 0,
-        oi_PE: parseFloat(raw.oi_PE) || 0,
-        volume_CE: parseFloat(raw.volume_CE) || 0,
-        volume_PE: parseFloat(raw.volume_PE) || 0,
+        oi_ce: parseFloat(raw.oi_ce) || 0,
+        oi_pe: parseFloat(raw.oi_pe) || 0,
+        volume_ce: parseFloat(raw.volume_ce) || 0,
+        volume_pe: parseFloat(raw.volume_pe) || 0,
       });
     }
 

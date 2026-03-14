@@ -100,15 +100,27 @@ def run_anomaly_detection() -> dict:
     # ── Write back to DuckDB ─────────────────────────────────────
     update_df = df[["id", "anomaly_flag", "anomaly_score", "unusual_activity_score"]]
 
-    # Register as a temporary table, then UPDATE via join
+    # Register as a temporary table
     conn.register("_anomaly_results", update_df)
+    
+    # Add index for faster update
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_temp_anomaly_id ON _anomaly_results(id)")
+    
+    # UPDATE via subquery
     conn.execute("""
         UPDATE options_enriched
-        SET anomaly_flag = ar.anomaly_flag,
-            anomaly_score = ar.anomaly_score,
-            unusual_activity_score = ar.unusual_activity_score
-        FROM _anomaly_results ar
-        WHERE options_enriched.id = ar.id
+        SET anomaly_flag = (
+            SELECT ar.anomaly_flag FROM _anomaly_results ar WHERE ar.id = options_enriched.id
+        ),
+        anomaly_score = (
+            SELECT ar.anomaly_score FROM _anomaly_results ar WHERE ar.id = options_enriched.id
+        ),
+        unusual_activity_score = (
+            SELECT ar.unusual_activity_score FROM _anomaly_results ar WHERE ar.id = options_enriched.id
+        )
+        WHERE EXISTS (
+            SELECT 1 FROM _anomaly_results ar WHERE ar.id = options_enriched.id
+        )
     """)
     conn.unregister("_anomaly_results")
 

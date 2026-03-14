@@ -81,13 +81,13 @@ export function computeGEX(snapshot: OptionRow[]): GEXResult {
 
   for (const row of snapshot) {
     const s = row.spot_close || spot;
-    const ivCe = approximateIV(row.CE || 0, s);
-    const ivPe = approximateIV(row.PE || 0, s);
+    const ivCe = approximateIV(row.ce || 0, s);
+    const ivPe = approximateIV(row.pe || 0, s);
     const gammaCe = approximateGamma(s, row.strike, ivCe);
     const gammaPe = approximateGamma(s, row.strike, ivPe);
 
-    const gexCe = (gammaCe * row.oi_CE * CONTRACT_SIZE * s) / 1e7;
-    const gexPe = -(gammaPe * row.oi_PE * CONTRACT_SIZE * s) / 1e7;
+    const gexCe = (gammaCe * row.oi_ce * CONTRACT_SIZE * s) / 1e7;
+    const gexPe = -(gammaPe * row.oi_pe * CONTRACT_SIZE * s) / 1e7;
 
     byStrike.push({
       strike: row.strike,
@@ -139,14 +139,14 @@ export function computeFlowPressure(snapshot: OptionRow[]): FlowPressureResult {
   const byStrike: FlowPressureResult["by_strike"] = [];
 
   for (const row of snapshot) {
-    totalCallVol += row.volume_CE;
-    totalPutVol += row.volume_PE;
-    const tv = row.volume_CE + row.volume_PE;
+    totalCallVol += row.volume_ce;
+    totalPutVol += row.volume_pe;
+    const tv = row.volume_ce + row.volume_pe;
     byStrike.push({
       strike: row.strike,
-      call_volume: row.volume_CE,
-      put_volume: row.volume_PE,
-      strike_pressure: tv > 0 ? Math.round(((row.volume_CE - row.volume_PE) / tv) * 10000) / 10000 : 0,
+      call_volume: row.volume_ce,
+      put_volume: row.volume_pe,
+      strike_pressure: tv > 0 ? Math.round(((row.volume_ce - row.volume_pe) / tv) * 10000) / 10000 : 0,
     });
   }
 
@@ -177,7 +177,7 @@ export function detectVolRegime(snapshot: OptionRow[]): VolRegimeResult {
 
   for (const row of snapshot) {
     const s = row.spot_close || spot;
-    const iv = approximateIV(row.CE || 0, s);
+    const iv = approximateIV(row.ce || 0, s);
     ivByStrike.push({ strike: row.strike, iv });
   }
 
@@ -214,10 +214,10 @@ export function detectVolRegime(snapshot: OptionRow[]): VolRegimeResult {
 export function detectLiquidityClusters(snapshot: OptionRow[]): LiquidityResult {
   const data: LiquidityItem[] = snapshot.map(row => ({
     strike: row.strike,
-    total_oi: row.oi_CE + row.oi_PE,
-    total_volume: row.volume_CE + row.volume_PE,
-    call_oi: row.oi_CE,
-    put_oi: row.oi_PE,
+    total_oi: row.oi_ce + row.oi_pe,
+    total_volume: row.volume_ce + row.volume_pe,
+    call_oi: row.oi_ce,
+    put_oi: row.oi_pe,
     liquidity_score: 0,
   }));
 
@@ -244,7 +244,7 @@ export function detectLiquidityClusters(snapshot: OptionRow[]): LiquidityResult 
 // ─── Feature 6: Unusual Activity Detection ───────────────────────────────────
 
 export function detectUnusualActivity(snapshot: OptionRow[]): UnusualActivityResult {
-  const totalVols = snapshot.map(r => r.volume_CE + r.volume_PE);
+  const totalVols = snapshot.map(r => r.volume_ce + r.volume_pe);
   if (totalVols.length < 3) return { alerts: [], has_unusual_activity: false, mean_volume: 0, std_volume: 0 };
 
   const m = mean(totalVols);
@@ -253,17 +253,17 @@ export function detectUnusualActivity(snapshot: OptionRow[]): UnusualActivityRes
 
   const alerts: UnusualActivityResult["alerts"] = [];
   for (const row of snapshot) {
-    const tv = row.volume_CE + row.volume_PE;
+    const tv = row.volume_ce + row.volume_pe;
     const z = (tv - m) / s;
     if (Math.abs(z) > 2.0) {
       alerts.push({
         strike: row.strike,
         total_volume: tv,
-        call_volume: row.volume_CE,
-        put_volume: row.volume_PE,
+        call_volume: row.volume_ce,
+        put_volume: row.volume_pe,
         z_score: Math.round(z * 100) / 100,
         pct_above_mean: m > 0 ? Math.round(((tv - m) / m) * 1000) / 10 : 0,
-        type: row.volume_CE > row.volume_PE * 1.5 ? "Call Heavy" : row.volume_PE > row.volume_CE * 1.5 ? "Put Heavy" : "Mixed",
+        type: row.volume_ce > row.volume_pe * 1.5 ? "Call Heavy" : row.volume_pe > row.volume_ce * 1.5 ? "Put Heavy" : "Mixed",
       });
     }
   }
@@ -289,10 +289,10 @@ export function analyzeMarketStructure(snapshot: OptionRow[]): MarketStructureRe
   let totalPutOI = 0, totalCallOI = 0;
 
   for (const row of snapshot) {
-    totalPutOI += row.oi_PE;
-    totalCallOI += row.oi_CE;
-    if (row.oi_PE > maxPutOI) { maxPutOI = row.oi_PE; supportStrike = row.strike; }
-    if (row.oi_CE > maxCallOI) { maxCallOI = row.oi_CE; resistanceStrike = row.strike; }
+    totalPutOI += row.oi_pe;
+    totalCallOI += row.oi_ce;
+    if (row.oi_pe > maxPutOI) { maxPutOI = row.oi_pe; supportStrike = row.strike; }
+    if (row.oi_ce > maxCallOI) { maxCallOI = row.oi_ce; resistanceStrike = row.strike; }
   }
 
   const spot = snapshot[snapshot.length - 1].spot_close;
@@ -326,8 +326,8 @@ export function computeStabilityScore(
 
   const anomalyScore = Math.max(100 - unusual.alerts.length * 15, 0);
 
-  const totalCallOI = snapshot.reduce((s, r) => s + r.oi_CE, 0);
-  const totalPutOI = snapshot.reduce((s, r) => s + r.oi_PE, 0);
+  const totalCallOI = snapshot.reduce((s, r) => s + r.oi_ce, 0);
+  const totalPutOI = snapshot.reduce((s, r) => s + r.oi_pe, 0);
   const totalOI = totalCallOI + totalPutOI;
   const oiScore = totalOI > 0 ? Math.max(100 - (Math.abs(totalCallOI - totalPutOI) / totalOI) * 200, 0) : 50;
 
@@ -413,10 +413,10 @@ export function generateTimeline(timeSeries: OptionRow[]): TimelineEvent[] {
   for (let i = 0; i < timestamps.length; i++) {
     const ts = timestamps[i];
     const rows = grouped.get(ts)!;
-    const callVol = rows.reduce((s, r) => s + r.volume_CE, 0);
-    const putVol = rows.reduce((s, r) => s + r.volume_PE, 0);
-    const callOI = rows.reduce((s, r) => s + r.oi_CE, 0);
-    const putOI = rows.reduce((s, r) => s + r.oi_PE, 0);
+    const callVol = rows.reduce((s, r) => s + r.volume_ce, 0);
+    const putVol = rows.reduce((s, r) => s + r.volume_pe, 0);
+    const callOI = rows.reduce((s, r) => s + r.oi_ce, 0);
+    const putOI = rows.reduce((s, r) => s + r.oi_pe, 0);
 
     const tsShort = ts.includes(" ") ? ts.split(" ")[1]?.slice(0, 5) || ts : ts;
 

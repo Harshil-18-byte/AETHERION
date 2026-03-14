@@ -27,15 +27,15 @@ export default function Sidebar({
           const showGroup = section.group !== previousGroup;
 
           return (
-            <div key={section.id}>
+            <div key={section.id} className={`animate-in stagger-${(index % 4) + 1}`}>
               {showGroup && (
-                <span className="sidebar-section-label">{section.group}</span>
+                <span className="sidebar-section-label mono">{section.group}</span>
               )}
               <button
-                className={`sidebar-item ${activeSection === section.id ? "sidebar-item-active" : ""}`}
+                className={`sidebar-item terminal-btn mono ${activeSection === section.id ? "sidebar-item-active" : ""}`}
                 onClick={() => onSectionChange(section.id)}
               >
-                {section.label}
+                {section.label.toUpperCase()} <span className="text-muted">{"<GO>"}</span>
               </button>
             </div>
           );

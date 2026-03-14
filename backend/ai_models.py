@@ -14,7 +14,7 @@ def detect_anomalies(df: pd.DataFrame, contamination: float = 0.05) -> list:
     Isolation Forest on [volume_CE, volume_PE, oi_CE, oi_PE, iv_proxy] columns.
     Returns list of anomaly rows with details.
     """
-    feature_cols = ["volume_CE", "volume_PE", "oi_CE", "oi_PE", "iv_proxy"]
+    feature_cols = ["volume_ce", "volume_pe", "oi_ce", "oi_pe", "iv_proxy"]
     features = df[feature_cols].fillna(0).values
 
     if len(features) < 10:
@@ -41,15 +41,15 @@ def detect_anomalies(df: pd.DataFrame, contamination: float = 0.05) -> list:
     for _, row in anomalies.iterrows():
         # Determine likely reason
         reasons = []
-        if row["volume_CE"] + row["volume_PE"] > df["total_volume"].quantile(0.95):
+        if row["volume_ce"] + row["volume_pe"] > df["total_volume"].quantile(0.95):
             reasons.append("Unusually high volume")
-        if row["oi_CE"] + row["oi_PE"] > df["total_oi"].quantile(0.95):
+        if row["oi_ce"] + row["oi_pe"] > df["total_oi"].quantile(0.95):
             reasons.append("Unusually high OI")
         if row["iv_proxy"] > df["iv_proxy"].quantile(0.95):
             reasons.append("High IV proxy")
-        if abs(row.get("oi_change_CE", 0)) > df["oi_change_CE"].abs().quantile(0.95):
+        if abs(row.get("oi_change_ce", 0)) > df["oi_change_ce"].abs().quantile(0.95):
             reasons.append("Large CE OI change")
-        if abs(row.get("oi_change_PE", 0)) > df["oi_change_PE"].abs().quantile(0.95):
+        if abs(row.get("oi_change_pe", 0)) > df["oi_change_pe"].abs().quantile(0.95):
             reasons.append("Large PE OI change")
 
         if not reasons:
@@ -60,10 +60,10 @@ def detect_anomalies(df: pd.DataFrame, contamination: float = 0.05) -> list:
             "expiry": str(row["expiry"])[:10] if pd.notna(row["expiry"]) else None,
             "strike": float(row["strike"]),
             "spot_close": float(row["spot_close"]),
-            "volume_CE": float(row["volume_CE"]),
-            "volume_PE": float(row["volume_PE"]),
-            "oi_CE": float(row["oi_CE"]),
-            "oi_PE": float(row["oi_PE"]),
+            "volume_ce": float(row["volume_ce"]),
+            "volume_pe": float(row["volume_pe"]),
+            "oi_ce": float(row["oi_ce"]),
+            "oi_pe": float(row["oi_pe"]),
             "iv_proxy": round(float(row["iv_proxy"]), 4),
             "anomaly_score": round(float(row["anomaly_score"]), 4),
             "reasons": reasons,
@@ -171,8 +171,8 @@ def generate_insights(df: pd.DataFrame, anomalies: list, skew_data: list,
 
     # PCR trend
     latest_pcr_data = df.groupby("datetime").agg(
-        total_ce=("oi_CE", "sum"),
-        total_pe=("oi_PE", "sum"),
+        total_ce=("oi_ce", "sum"),
+        total_pe=("oi_pe", "sum"),
     ).reset_index().sort_values("datetime")
 
     if len(latest_pcr_data) > 1:

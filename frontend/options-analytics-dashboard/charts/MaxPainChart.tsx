@@ -3,11 +3,11 @@
 import React, { useMemo } from "react";
 import ReactECharts from "echarts-for-react";
 import { useTheme } from "next-themes";
-import type { MaxPainResult, OptionRow } from "@/utils/types";
+import type { MaxPainResult, LiquidityItem } from "@/utils/types";
 
 interface MaxPainChartProps {
   data: MaxPainResult;
-  snapshot: OptionRow[];
+  snapshot: LiquidityItem[];
 }
 
 export default function MaxPainChart({ data, snapshot }: MaxPainChartProps) {
@@ -18,7 +18,7 @@ export default function MaxPainChart({ data, snapshot }: MaxPainChartProps) {
     const strikes = snapshot.map(r => r.strike).sort((a,b) => a-b);
     const painValues = strikes.map(targ => {
       let pain = 0;
-      for (const opt of snapshot as any) {
+      for (const opt of snapshot) {
         if(opt.strike < targ) pain += (opt.call_oi || 0) * (targ - opt.strike);
         if(opt.strike > targ) pain += (opt.put_oi || 0) * (opt.strike - targ);
       }
@@ -68,7 +68,7 @@ export default function MaxPainChart({ data, snapshot }: MaxPainChartProps) {
           type: "bar",
           data: values,
           itemStyle: {
-            color: (params: any) => {
+            color: (params: { name: string }) => {
               if (params.name === data.max_pain_strike.toString()) return "#22c55e"; // Theme Green
               return "#38bdf8"; // Theme Blue
             }

@@ -80,5 +80,8 @@ VOLUME_SPIKE_STDDEV_MULT: float = float(
     os.getenv("OPTIX_VOLUME_SPIKE_MULT", "2.0")
 )
 
+# ── Environment & Mode ───────────────────────────────────────────
+DEV_MODE: bool = os.getenv("OPTIX_DEV_MODE", "false").lower() == "true"
+
 # ── Logging ──────────────────────────────────────────────────────
 LOG_LEVEL: str = os.getenv("OPTIX_LOG_LEVEL", "INFO")

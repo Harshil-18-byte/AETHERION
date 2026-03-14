@@ -76,6 +76,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   useEffect(() => {
     setIsMounted(true);
+    
+    // --- TEMPORARY BYPASS ---
+    if (BYPASS_AUTH) {
+      const dummyToken = "dummy_token_for_dev";
+      const dummyUser = {
+          id: 1,
+          email: "dev@example.com",
+          full_name: "Mock User",
+          is_active: 1
+      };
+      setToken(dummyToken);
+      setUser(dummyUser);
+      setIsLoading(false);
+      return;
+    }
+    // ------------------------
+
     const storedToken = localStorage.getItem("optix_token");
     if (storedToken) {
       setToken(storedToken);

@@ -39,11 +39,11 @@ def run_pattern_detection() -> dict:
             SELECT
                 expiry,
                 CASE
-                    WHEN moneyness < 0.95 THEN 'DEEP_OTM_PE'
-                    WHEN moneyness < 0.99 THEN 'OTM_PE'
-                    WHEN moneyness <= 1.01 THEN 'ATM'
-                    WHEN moneyness <= 1.05 THEN 'OTM_CE'
-                    ELSE 'DEEP_OTM_CE'
+                    WHEN moneyness < 0.95 THEN 'deep_otm_pe'
+                    WHEN moneyness < 0.99 THEN 'otm_pe'
+                    WHEN moneyness <= 1.01 THEN 'atm'
+                    WHEN moneyness <= 1.05 THEN 'otm_ce'
+                    ELSE 'deep_otm_ce'
                 END AS bucket,
                 AVG(iv_proxy) AS avg_iv,
                 COUNT(*) AS n_strikes
@@ -63,11 +63,11 @@ def run_pattern_detection() -> dict:
         exp_data = smile_data[smile_data["expiry"] == exp]
         bucket_iv = dict(zip(exp_data["bucket"], exp_data["avg_iv"]))
 
-        atm_iv = bucket_iv.get("ATM", 0)
-        otm_pe = bucket_iv.get("OTM_PE", atm_iv)
-        otm_ce = bucket_iv.get("OTM_CE", atm_iv)
-        deep_pe = bucket_iv.get("DEEP_OTM_PE", otm_pe)
-        deep_ce = bucket_iv.get("DEEP_OTM_CE", otm_ce)
+        atm_iv = bucket_iv.get("atm", 0)
+        otm_pe = bucket_iv.get("otm_pe", atm_iv)
+        otm_ce = bucket_iv.get("otm_ce", atm_iv)
+        deep_pe = bucket_iv.get("deep_otm_pe", otm_pe)
+        deep_ce = bucket_iv.get("deep_otm_ce", otm_ce)
 
         if atm_iv > 0:
             put_skew = (otm_pe - atm_iv) / atm_iv
@@ -117,8 +117,8 @@ def run_pattern_detection() -> dict:
         ),
         ranked AS (
             SELECT *,
-                   ROW_NUMBER() OVER (PARTITION BY expiry ORDER BY oi_CE DESC) AS ce_rank,
-                   ROW_NUMBER() OVER (PARTITION BY expiry ORDER BY oi_PE DESC) AS pe_rank
+                   ROW_NUMBER() OVER (PARTITION BY expiry ORDER BY oi_ce DESC) AS ce_rank,
+                   ROW_NUMBER() OVER (PARTITION BY expiry ORDER BY oi_pe DESC) AS pe_rank
             FROM snapshot
         )
         SELECT strike, expiry, oi_ce, oi_pe, total_oi, spot_close,
@@ -187,10 +187,9 @@ def run_pattern_detection() -> dict:
             CROSS JOIN all_strikes s
             GROUP BY c.expiry, s.settlement
         )
-        SELECT DISTINCT ON (expiry)
-               expiry, settlement_price AS max_pain_strike, total_liability AS min_total_liability
+        SELECT expiry, settlement_price AS max_pain_strike, MIN(total_liability) AS min_total_liability
         FROM liabilities
-        ORDER BY expiry, total_liability ASC
+        GROUP BY expiry
     """).df()
 
     max_pain_list = []

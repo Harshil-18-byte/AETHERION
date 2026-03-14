@@ -49,7 +49,9 @@ export default function Dashboard() {
     try {
       setLoading(true);
       setError(null);
+      console.log(`[Dashboard] Loading analysis for expiry: ${expiry || 'latest'}`);
       const result = await fetchAnalysis(expiry);
+      console.log(`[Dashboard] API Result:`, result);
       setExpiries(result.expiries);
       setSelectedExpiry(result.selected_expiry);
       setAnalysis(result.analysis);
@@ -120,37 +122,10 @@ export default function Dashboard() {
     }
   };
 
-  const syncStrike = (strikeStr: string) => {
-    const s = parseInt(strikeStr, 10);
-    if (!isNaN(s)) setFocusedStrike(s);
-  };
-
-  // Memoized Chart Data & Events (Must be before conditional returns)
-  const oiData = useMemo(() => {
-    if (!analysis) return [];
-    return analysis.liquidity.liquidity_map.map(d => ({
-      strike: d.strike, call_oi: d.call_oi, put_oi: d.put_oi,
-    }));
-  }, [analysis]);
-
-  const volumeData = useMemo(() => {
-    if (!analysis) return [];
-    return analysis.flow_pressure.by_strike.map(d => ({
-      strike: d.strike, call_volume: d.call_volume, put_volume: d.put_volume,
-    }));
-  }, [analysis]);
-
-  const focusData = useMemo(() => {
-    if (!analysis) return null;
-    return analysis.liquidity.liquidity_map.find(d => d.strike === focusedStrike) || analysis.liquidity.liquidity_map[0];
-  }, [analysis, focusedStrike]);
-
-  const gexFocus = useMemo(() => {
-    if (!analysis) return null;
-    return analysis.gex.by_strike.find(d => d.strike === focusedStrike);
-  }, [analysis, focusedStrike]);
-
+  // Consolidated Chart Interactions
   const chartEvents = useMemo(() => ({
+    onHover: (s: number) => setFocusedStrike(s),
+    onClick: (s: number) => setFocusedStrike(s),
     mouseover: (params: { name?: string | number }) => {
       if (params.name) {
         const s = parseInt(params.name.toString(), 10);
@@ -158,6 +133,31 @@ export default function Dashboard() {
       }
     }
   }), []);
+
+  // Memoized Chart Data & Events (Must be before conditional returns)
+  const oiData = useMemo(() => {
+    if (!analysis?.liquidity?.liquidity_map) return [];
+    return analysis.liquidity.liquidity_map.map(d => ({
+      strike: d.strike, call_oi: d.call_oi, put_oi: d.put_oi,
+    }));
+  }, [analysis]);
+
+  const volumeData = useMemo(() => {
+    if (!analysis?.flow_pressure?.by_strike) return [];
+    return analysis.flow_pressure.by_strike.map(d => ({
+      strike: d.strike, call_volume: d.call_volume, put_volume: d.put_volume,
+    }));
+  }, [analysis]);
+
+  const focusData = useMemo(() => {
+    if (!analysis?.liquidity?.liquidity_map) return null;
+    return analysis.liquidity.liquidity_map.find(d => d.strike === focusedStrike) || analysis.liquidity.liquidity_map[0];
+  }, [analysis, focusedStrike]);
+
+  const gexFocus = useMemo(() => {
+    if (!analysis?.gex?.by_strike) return null;
+    return analysis.gex.by_strike.find(d => d.strike === focusedStrike);
+  }, [analysis, focusedStrike]);
 
   // ── States ────────────────────────────────────────────────────────
   if (loading && !analysis) {
@@ -206,16 +206,16 @@ export default function Dashboard() {
         />
 
         {/* ── Command Bar ─────────────────────────────────────────── */}
-        <div className="command-bar">
+        <div className="command-bar terminal-panel">
           <form className="command-input-wrapper" onSubmit={handleCommandSubmit}>
-            <span className="command-prompt">{'>'}</span>
+            <span className="command-prompt text-amber mono">{'>'}</span>
             <input
               ref={inputRef}
               type="text"
-              className="command-input"
+              className="command-input mono"
               value={commandInput}
               onChange={(e) => setCommandInput(e.target.value)}
-              placeholder="Type command (e.g. VOLATILITY) or press '/' to focus"
+              placeholder="STRUC <GO>, VOLATILITY <GO>..."
             />
           </form>
 
@@ -253,63 +253,72 @@ export default function Dashboard() {
 
         <div className="terminal-body">
           {/* ── Market Intelligence Sidebar ────────────────────────── */}
-          <aside className="intel-sidebar">
+          <aside className="intel-sidebar animate-in stagger-1">
             <div className="sidebar-header">MARKET INTELLIGENCE</div>
             
-            <div className="intel-panel">
+            <div className="intel-panel terminal-panel">
               <div className="intel-row">
-                <span className="intel-label">Sentiment</span>
-                <span className={`intel-value intel-${sentimentType}`}>{flow_pressure.sentiment}</span>
+                <span className="intel-label mono">SENTIMENT</span>
+                <span className={`intel-value mono intel-${sentimentType}`}>{flow_pressure.sentiment.toUpperCase()}</span>
               </div>
               <div className="intel-row">
-                <span className="intel-label">Flow Pressure</span>
-                <span className={`intel-value intel-${sentimentType}`}>{flow_pressure.flow_pressure.toFixed(3)}</span>
+                <span className="intel-label mono">FLOW_PR</span>
+                <span className={`intel-value mono intel-${sentimentType}`}>{flow_pressure.flow_pressure.toFixed(3)}</span>
               </div>
               <div className="intel-row">
-                <span className="intel-label">Support Lvl</span>
-                <span className="intel-value">{market_structure.support.toLocaleString()}</span>
+                <span className="intel-label mono">SUPP_LVL</span>
+                <span className="intel-value mono text-cyan">{market_structure.support.toLocaleString()}</span>
               </div>
               <div className="intel-row">
-                <span className="intel-label">Resist Lvl</span>
-                <span className="intel-value">{market_structure.resistance.toLocaleString()}</span>
+                <span className="intel-label mono">RES_LVL</span>
+                <span className="intel-value mono text-red">{market_structure.resistance.toLocaleString()}</span>
               </div>
               <div className="intel-row">
-                <span className="intel-label">Vol Regime</span>
-                <span className="intel-value intel-warn">{vol_regime.regime}</span>
+                <span className="intel-label mono">VOL_REGIME</span>
+                <span className="intel-value mono text-amber">{vol_regime.regime.toUpperCase()}</span>
               </div>
               <div className="intel-row">
-                <span className="intel-label">Gamma Bias</span>
-                <span className="intel-value">{gex.total_gex > 0 ? "Positive" : "Negative"}</span>
+                <span className="intel-label mono">GAMMA_BIAS</span>
+                <span className="intel-value mono">{gex.total_gex > 0 ? "LONG" : "SHORT"}</span>
               </div>
+              <div className="metric-grid-overlay" />
             </div>
 
-            <div className="sidebar-header mt-4">STABILITY SCORE</div>
-            <div className="intel-panel">
+            <div className="sidebar-header mt-4 mono">STABILITY SCORE</div>
+            <div className="intel-panel terminal-panel">
                <div className="stability-main">
-                 <span className="stability-huge">{stability.score.toFixed(0)}</span>
-                 <span className="stability-sub">/ 100</span>
+                 <span className="stability-huge mono">{stability.score.toFixed(0)}</span>
+                 <span className="stability-sub mono">/ 100</span>
                </div>
                {Object.entries(stability.components).map(([key, value]) => (
                   <div key={key} className="intel-row">
-                    <span className="intel-label">{key.replace(/_/g, " ")}</span>
-                    <span className="intel-value">{value.toFixed(0)}</span>
+                    <span className="intel-label mono">{key.replace(/_/g, " ").toUpperCase()}</span>
+                    <span className="intel-value mono">{value.toFixed(0)}</span>
                   </div>
                ))}
+               <div className="metric-grid-overlay" />
             </div>
 
-            <div className="sidebar-header mt-4">MARKET NARRATIVE</div>
-            <div className="intel-panel">
-              <p className="narrative-mini">{narrative}</p>
+            <div className="sidebar-header mt-4 mono">MARKET NARRATIVE</div>
+            <div className="intel-panel terminal-panel">
+              <p className="narrative-mini mono text-secondary">{narrative}</p>
+              <div className="metric-grid-overlay" />
             </div>
           </aside>
 
           {/* ── Main Workspace ─────────────────────────────────────── */}
-          <main className="terminal-workspace">
+          <main className="terminal-workspace animate-in stagger-2">
             {activeCommand === "OVERVIEW" && (
               <div className="workspace-grid workspace-overview">
                 <div className="panel panel-span-2">
                   <div className="panel-header">EXPECTED MOVE BOUNDARIES</div>
-                  <div className="panel-body"><ExpectedMoveChart data={analysis.expected_move!} spot={gex.spot} /></div>
+                  <div className="panel-body">
+                    {analysis.expected_move ? (
+                      <ExpectedMoveChart data={analysis.expected_move} spot={gex.spot} />
+                    ) : (
+                      <div className="chart-placeholder">Expected move data unavailable</div>
+                    )}
+                  </div>
                 </div>
                 <div className="panel">
                   <div className="panel-header">OPEN INTEREST PROFILE</div>
@@ -317,7 +326,7 @@ export default function Dashboard() {
                 </div>
                 <div className="panel panel-span-2">
                   <div className="panel-header">LIQUIDITY HEATMAP</div>
-                  <div className="panel-body"><LiquidityHeatmap data={liquidity.liquidity_map} onEvents={chartEvents} /></div>
+                  <div className="panel-body"><LiquidityHeatmap data={liquidity.liquidity_map || []} onEvents={chartEvents} /></div>
                 </div>
               </div>
             )}
@@ -326,11 +335,23 @@ export default function Dashboard() {
               <div className="workspace-grid workspace-2col">
                 <div className="panel">
                   <div className="panel-header">MAX PAIN DISTRIBUTION</div>
-                  <div className="panel-body"><MaxPainChart data={analysis.max_pain!} snapshot={liquidity.liquidity_map as any} /></div>
+                  <div className="panel-body">
+                    {analysis.max_pain ? (
+                      <MaxPainChart data={analysis.max_pain} snapshot={liquidity.liquidity_map || []} />
+                    ) : (
+                      <div className="chart-placeholder">Max pain data unavailable</div>
+                    )}
+                  </div>
                 </div>
                 <div className="panel">
                   <div className="panel-header">OPTIONS VOLUME PROFILE</div>
-                  <div className="panel-body"><VolumeProfileChart data={analysis.volume_profile!} /></div>
+                  <div className="panel-body">
+                    {analysis.volume_profile ? (
+                      <VolumeProfileChart data={analysis.volume_profile} />
+                    ) : (
+                      <div className="chart-placeholder">Volume profile unavailable</div>
+                    )}
+                  </div>
                 </div>
                 <div className="panel">
                   <div className="panel-header">OPEN INTEREST ANALYSIS</div>
@@ -347,15 +368,27 @@ export default function Dashboard() {
               <div className="workspace-grid workspace-2col">
                 <div className="panel">
                   <div className="panel-header">DEALER DELTA EXPOSURE (DEX)</div>
-                  <div className="panel-body"><DEXChart data={analysis.delta_exposure!.by_strike} /></div>
+                  <div className="panel-body">
+                    {analysis.delta_exposure?.by_strike ? (
+                      <DEXChart data={analysis.delta_exposure.by_strike} />
+                    ) : (
+                      <div className="chart-placeholder">DEX data unavailable</div>
+                    )}
+                  </div>
                 </div>
                 <div className="panel">
                   <div className="panel-header">VANNA & CHARM EXPOSURE</div>
-                  <div className="panel-body"><VannaCharmChart data={analysis.vanna_charm!.by_strike} /></div>
+                  <div className="panel-body">
+                    {analysis.vanna_charm?.by_strike ? (
+                      <VannaCharmChart data={analysis.vanna_charm.by_strike} />
+                    ) : (
+                      <div className="chart-placeholder">Vanna/Charm data unavailable</div>
+                    )}
+                  </div>
                 </div>
                 <div className="panel panel-span-2">
                   <div className="panel-header">GAMMA EXPOSURE (GEX)</div>
-                  <div className="panel-body"><GEXChart data={gex.by_strike} gammaFlipLevel={gamma_flip.gamma_flip_level} spot={gex.spot} /></div>
+                  <div className="panel-body"><GEXChart data={gex.by_strike || []} gammaFlipLevel={gamma_flip?.gamma_flip_level} spot={gex.spot} /></div>
                 </div>
               </div>
             )}
@@ -364,11 +397,17 @@ export default function Dashboard() {
               <div className="workspace-grid workspace-2col">
                 <div className="panel">
                   <div className="panel-header">HISTORICAL VOLATILITY CONES</div>
-                  <div className="panel-body"><VolConesChart data={analysis.vol_cones!} /></div>
+                  <div className="panel-body">
+                    {analysis.vol_cones ? (
+                      <VolConesChart data={analysis.vol_cones} />
+                    ) : (
+                      <div className="chart-placeholder">Vol cones unavailable</div>
+                    )}
+                  </div>
                 </div>
                 <div className="panel">
                   <div className="panel-header">VOLATILITY SMILE</div>
-                  <div className="panel-body"><VolSmileChart data={vol_regime.iv_by_strike} spot={gex.spot} onEvents={chartEvents} /></div>
+                  <div className="panel-body"><VolSmileChart data={vol_regime.iv_by_strike || []} spot={gex.spot} onEvents={chartEvents} /></div>
                 </div>
               </div>
             )}
@@ -384,49 +423,59 @@ export default function Dashboard() {
 
             {activeCommand === "FLOW" && (
               <div className="workspace-grid workspace-2col">
-                <div className="panel panel-span-2">
-                  <div className="panel-header">NET FLOW PRESSURE BY STRIKE</div>
+                <div className="panel panel-span-2 terminal-panel">
+                  <div className="panel-header mono">NET FLOW PRESSURE BY STRIKE</div>
                   <div className="panel-body" style={{ height: "300px" }}><FlowChart data={flow_pressure.by_strike} onEvents={chartEvents} /></div>
+                  <div className="metric-grid-overlay" />
                 </div>
-                <div className="panel" style={{ height: "400px" }}>
+                <div className="panel terminal-panel" style={{ height: "400px" }}>
+                  <div className="panel-header mono">LIVE OPTIONS TAPE</div>
                   <LiveTape />
+                  <div className="metric-grid-overlay" />
                 </div>
-                <div className="panel" style={{ height: "400px" }}>
+                <div className="panel terminal-panel" style={{ height: "400px" }}>
+                  <div className="panel-header mono">DARK POOL FEED</div>
                   <DarkPoolFeed />
+                  <div className="metric-grid-overlay" />
                 </div>
               </div>
             )}
 
             {activeCommand === "STRATEGY" && (
               <div className="workspace-grid workspace-1col" style={{ minHeight: "650px" }}>
-                <StrategyBuilder />
+                <div className="panel terminal-panel">
+                  <div className="panel-header mono">STRATEGY BUILDER / PAYOFF OPTIMIZER</div>
+                  <StrategyBuilder />
+                  <div className="metric-grid-overlay" />
+                </div>
               </div>
             )}
           </main>
 
           {/* ── Right Sidebar: Strike Focus & Events ───────────────── */}
-          <aside className="focus-sidebar">
-            <div className="sidebar-header">STRIKE FOCUS: {focusedStrike || "-"}</div>
+          <aside className="focus-sidebar animate-in stagger-3">
+            <div className="sidebar-header mono">STRIKE FOCUS: {focusedStrike || "-"}</div>
             {focusedStrike ? (
-              <div className="focus-panel">
+              <div className="focus-panel terminal-panel">
                 <div className="focus-grid">
                   <div className="focus-box">
-                    <span className="focus-lbl">Call OI</span>
-                    <span className="focus-val text-accent">{focusData?.call_oi.toLocaleString()}</span>
+                    <span className="focus-lbl mono">CALL_OI</span>
+                    <span className="focus-val mono text-cyan">{focusData?.call_oi.toLocaleString()}</span>
                   </div>
                   <div className="focus-box">
-                    <span className="focus-lbl">Put OI</span>
-                    <span className="focus-val text-red">{focusData?.put_oi.toLocaleString()}</span>
+                    <span className="focus-lbl mono">PUT_OI</span>
+                    <span className="focus-val mono text-red">{focusData?.put_oi.toLocaleString()}</span>
                   </div>
                   <div className="focus-box">
-                    <span className="focus-lbl">Net GEX</span>
-                    <span className="focus-val">{gexFocus?.net_gex ? gexFocus.net_gex.toLocaleString() : "0"}</span>
+                    <span className="focus-lbl mono">NET_GEX</span>
+                    <span className="focus-val mono">{gexFocus?.net_gex ? gexFocus.net_gex.toLocaleString() : "0"}</span>
                   </div>
                   <div className="focus-box">
-                    <span className="focus-lbl">Liquidity</span>
-                    <span className="focus-val">{focusData?.liquidity_score.toFixed(2)}</span>
+                    <span className="focus-lbl mono">LIQ_SCR</span>
+                    <span className="focus-val mono text-amber">{focusData?.liquidity_score.toFixed(2)}</span>
                   </div>
                 </div>
+                <div className="metric-grid-overlay" />
               </div>
             ) : (
               <div className="focus-empty">Hover a strike to view detailed analytics</div>

@@ -19,10 +19,10 @@ def compute_heatmap(df: pd.DataFrame, expiry: str = None) -> dict:
 
     # Aggregate total OI per strike × expiry
     pivot_call = data.pivot_table(
-        values="oi_CE", index="strike", columns="expiry", aggfunc="last"
+        values="oi_ce", index="strike", columns="expiry", aggfunc="last"
     ).fillna(0)
     pivot_put = data.pivot_table(
-        values="oi_PE", index="strike", columns="expiry", aggfunc="last"
+        values="oi_pe", index="strike", columns="expiry", aggfunc="last"
     ).fillna(0)
     pivot_total = data.pivot_table(
         values="total_oi", index="strike", columns="expiry", aggfunc="last"
@@ -69,20 +69,20 @@ def compute_pcr_timeseries(df: pd.DataFrame, expiry: str = None) -> list:
         data = data[data["expiry"] == pd.to_datetime(expiry)]
 
     grouped = data.groupby("datetime").agg(
-        total_oi_CE=("oi_CE", "sum"),
-        total_oi_PE=("oi_PE", "sum"),
-        total_vol_CE=("volume_CE", "sum"),
-        total_vol_PE=("volume_PE", "sum"),
+        total_oi_ce=("oi_ce", "sum"),
+        total_oi_pe=("oi_pe", "sum"),
+        total_vol_ce=("volume_ce", "sum"),
+        total_vol_pe=("volume_pe", "sum"),
     ).reset_index()
 
     grouped["pcr"] = np.where(
-        grouped["total_oi_CE"] > 0,
-        grouped["total_oi_PE"] / grouped["total_oi_CE"],
+        grouped["total_oi_ce"] > 0,
+        grouped["total_oi_pe"] / grouped["total_oi_ce"],
         None,
     )
     grouped["volume_pcr"] = np.where(
-        grouped["total_vol_CE"] > 0,
-        grouped["total_vol_PE"] / grouped["total_vol_CE"],
+        grouped["total_vol_ce"] > 0,
+        grouped["total_vol_pe"] / grouped["total_vol_ce"],
         None,
     )
 

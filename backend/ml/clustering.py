@@ -66,6 +66,10 @@ def run_clustering() -> dict:
     # not just the latest snapshot — so every timestamp gets labeled.
     update_df = df[["strike", "expiry", "cluster_kmeans", "cluster_dbscan"]].drop_duplicates()
     conn.register("_cluster_labels", update_df)
+    
+    # Add index for faster update
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_temp_cluster_lookup ON _cluster_labels(strike, expiry)")
+
     conn.execute("""
         UPDATE options_enriched
         SET cluster_kmeans = (

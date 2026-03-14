@@ -18,7 +18,10 @@ def run_timeseries_analysis() -> dict:
     bucket_data = conn.execute("""
         SELECT
             expiry,
-            date_trunc('minute', datetime) - (extract(minute from datetime)::int % 5) * interval '1 minute' AS bucket,
+            datetime(
+                strftime('%Y-%m-%d %H:%M:00', datetime),
+                '-' || (strftime('%M', datetime) % 5) || ' minutes'
+            ) AS bucket,
             AVG(iv_proxy) AS avg_iv,
             SUM(total_oi) AS total_oi,
             SUM(total_volume) AS total_vol

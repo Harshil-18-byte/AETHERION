@@ -13,19 +13,19 @@ from db.connection import get_connection
 
 RAW_TABLE_DDL = """
 CREATE TABLE IF NOT EXISTS options_raw (
-    id              SERIAL PRIMARY KEY,
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
     symbol          VARCHAR(50),
     datetime        TIMESTAMP,
     expiry          DATE,
-    CE              DOUBLE PRECISION,
-    PE              DOUBLE PRECISION,
-    spot_close      DOUBLE PRECISION,
-    ATM             DOUBLE PRECISION,
-    strike          DOUBLE PRECISION,
-    oi_CE           BIGINT,
-    oi_PE           BIGINT,
-    volume_CE       BIGINT,
-    volume_PE       BIGINT
+    ce              REAL,
+    pe              REAL,
+    spot_close      REAL,
+    atm             REAL,
+    strike          REAL,
+    oi_ce           BIGINT,
+    oi_pe           BIGINT,
+    volume_ce       BIGINT,
+    volume_pe       BIGINT
 );
 """
 
@@ -37,71 +37,71 @@ CREATE TABLE IF NOT EXISTS options_raw (
 
 ENRICHED_TABLE_DDL = """
 CREATE TABLE IF NOT EXISTS options_enriched (
-    id              SERIAL PRIMARY KEY,
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
     -- original columns
     symbol          VARCHAR(50),
     datetime        TIMESTAMP,
     expiry          DATE,
-    CE              DOUBLE PRECISION,
-    PE              DOUBLE PRECISION,
-    spot_close      DOUBLE PRECISION,
-    ATM             DOUBLE PRECISION,
-    strike          DOUBLE PRECISION,
-    oi_CE           BIGINT,
-    oi_PE           BIGINT,
-    volume_CE       BIGINT,
-    volume_PE       BIGINT,
+    ce              REAL,
+    pe              REAL,
+    spot_close      REAL,
+    atm             REAL,
+    strike          REAL,
+    oi_ce           BIGINT,
+    oi_pe           BIGINT,
+    volume_ce       BIGINT,
+    volume_pe       BIGINT,
 
     -- aggregated
     total_oi        BIGINT,
     total_volume    BIGINT,
 
     -- moneyness & position
-    moneyness       DOUBLE PRECISION,
+    moneyness       REAL,
     days_to_expiry  INTEGER,
 
     -- ratios
-    pcr_oi          DOUBLE PRECISION,
-    pcr_volume      DOUBLE PRECISION,
+    pcr_oi          REAL,
+    pcr_volume      REAL,
 
     -- changes
-    oi_change_CE    BIGINT,
-    oi_change_PE    BIGINT,
-    volume_change_pct DOUBLE PRECISION,
-    oi_change_pct     DOUBLE PRECISION,
+    oi_change_ce    BIGINT,
+    oi_change_pe    BIGINT,
+    volume_change_pct REAL,
+    oi_change_pct     REAL,
 
     -- relative metrics
-    relative_volume   DOUBLE PRECISION,
+    relative_volume   REAL,
 
     -- IV proxy
-    iv_proxy        DOUBLE PRECISION,
+    iv_proxy        REAL,
 
     -- IV rank & percentile
-    iv_rank         DOUBLE PRECISION,
-    iv_percentile   DOUBLE PRECISION,
+    iv_rank         REAL,
+    iv_percentile   REAL,
 
     -- greeks proxies
-    gamma_exposure_proxy DOUBLE PRECISION,
-    cum_delta_proxy      DOUBLE PRECISION,
+    gamma_exposure_proxy REAL,
+    cum_delta_proxy      REAL,
 
     -- black-scholes
-    bs_theo_CE      DOUBLE PRECISION,
-    bs_theo_PE      DOUBLE PRECISION,
-    bs_delta_CE     DOUBLE PRECISION,
-    bs_delta_PE     DOUBLE PRECISION,
-    bs_gamma        DOUBLE PRECISION,
-    bs_vega         DOUBLE PRECISION,
-    bs_theta_CE     DOUBLE PRECISION,
-    bs_theta_PE     DOUBLE PRECISION,
-    bs_rho_CE       DOUBLE PRECISION,
-    bs_rho_PE       DOUBLE PRECISION,
+    bs_theo_ce      REAL,
+    bs_theo_pe      REAL,
+    bs_delta_ce     REAL,
+    bs_delta_pe     REAL,
+    bs_gamma        REAL,
+    bs_vega         REAL,
+    bs_theta_ce     REAL,
+    bs_theta_pe     REAL,
+    bs_rho_ce       REAL,
+    bs_rho_pe       REAL,
 
     -- ML labels
     anomaly_flag    INTEGER DEFAULT 0,
-    anomaly_score   DOUBLE PRECISION  DEFAULT 0.0,
+    anomaly_score   REAL  DEFAULT 0.0,
     cluster_kmeans  INTEGER DEFAULT -1,
     cluster_dbscan  INTEGER DEFAULT -1,
-    unusual_activity_score DOUBLE PRECISION DEFAULT 0.0
+    unusual_activity_score REAL DEFAULT 0.0
 );
 """
 
@@ -111,21 +111,19 @@ CREATE TABLE IF NOT EXISTS options_enriched (
 # ═══════════════════════════════════════════════════════════════════
 
 INDEXES = [
-    "CREATE INDEX IF NOT EXISTS idx_enr_datetime     ON options_enriched(datetime);",
-    "CREATE INDEX IF NOT EXISTS idx_enr_strike       ON options_enriched(strike);",
-    "CREATE INDEX IF NOT EXISTS idx_enr_expiry       ON options_enriched(expiry);",
-    "CREATE INDEX IF NOT EXISTS idx_enr_dt_exp       ON options_enriched(datetime, expiry);",
-    "CREATE INDEX IF NOT EXISTS idx_enr_dt_str       ON options_enriched(datetime, strike);",
-    "CREATE INDEX IF NOT EXISTS idx_enr_exp_str      ON options_enriched(expiry, strike);",
-    "CREATE INDEX IF NOT EXISTS idx_enr_anomaly      ON options_enriched(anomaly_flag);",
+    "CREATE INDEX IF NOT EXISTS idx_options_expiry_datetime ON options_enriched(expiry, datetime);",
+    "CREATE INDEX IF NOT EXISTS idx_options_strike ON options_enriched(strike);",
+    "CREATE INDEX IF NOT EXISTS idx_options_datetime ON options_enriched(datetime);",
+    "CREATE INDEX IF NOT EXISTS idx_enr_dt_exp ON options_enriched(datetime, expiry);",
+    "CREATE INDEX IF NOT EXISTS idx_enr_anomaly ON options_enriched(anomaly_flag);",
 ]
 
 
 def create_schema() -> None:
     """Create raw + enriched tables and indexes."""
     conn = get_connection()
-    conn.execute("DROP TABLE IF EXISTS options_raw CASCADE")
-    conn.execute("DROP TABLE IF EXISTS options_enriched CASCADE")
+    conn.execute("DROP TABLE IF EXISTS options_raw")
+    conn.execute("DROP TABLE IF EXISTS options_enriched")
     conn.execute(RAW_TABLE_DDL)
     conn.execute(ENRICHED_TABLE_DDL)
     for idx_sql in INDEXES:
@@ -148,7 +146,8 @@ MATERIALIZED_VIEWS = {
             AVG(iv_proxy)          AS avg_iv,
             MIN(iv_proxy)          AS min_iv,
             MAX(iv_proxy)          AS max_iv,
-            stddev(iv_proxy)       AS std_iv,
+            -- SQLite doesn't have standard STDDEV, approximating with: sqrt(avg(x*x) - avg(x)*avg(x))
+            SQRT(AVG(iv_proxy * iv_proxy) - AVG(iv_proxy) * AVG(iv_proxy)) AS std_iv,
             COUNT(*)               AS obs_count
         FROM options_enriched
         GROUP BY strike, expiry
@@ -165,8 +164,8 @@ MATERIALIZED_VIEWS = {
         SELECT
             e.strike,
             e.expiry,
-            e.oi_CE,
-            e.oi_PE,
+            e.oi_ce,
+            e.oi_pe,
             e.total_oi,
             e.pcr_oi,
             e.datetime
@@ -178,10 +177,10 @@ MATERIALIZED_VIEWS = {
     "mv_volume_timeseries": """
         CREATE TABLE mv_volume_timeseries AS
         SELECT
-            date_trunc('minute', datetime) - (extract(minute from datetime)::int % 5) * interval '1 minute' AS bucket,
+            strftime('%Y-%m-%d %H:%M:00', datetime) AS bucket,
             expiry,
-            SUM(volume_CE)   AS total_vol_CE,
-            SUM(volume_PE)   AS total_vol_PE,
+            SUM(volume_ce)   AS total_vol_ce,
+            SUM(volume_pe)   AS total_vol_pe,
             SUM(total_volume) AS total_vol,
             AVG(spot_close)   AS avg_spot,
             COUNT(DISTINCT strike) AS n_strikes
@@ -202,10 +201,10 @@ MATERIALIZED_VIEWS = {
             e.expiry,
             e.pcr_oi,
             e.pcr_volume,
-            e.oi_CE,
-            e.oi_PE,
-            e.volume_CE,
-            e.volume_PE
+            e.oi_ce,
+            e.oi_pe,
+            e.volume_ce,
+            e.volume_pe
         FROM options_enriched e
         JOIN latest l ON e.expiry = l.expiry AND e.datetime = l.max_dt
     """,
@@ -220,11 +219,17 @@ MATERIALIZED_VIEWS = {
             iv_proxy,
             total_oi,
             total_volume,
-            AVG(iv_proxy)  OVER (PARTITION BY strike, expiry ORDER BY datetime ROWS BETWEEN 4 PRECEDING AND CURRENT ROW)  AS iv_ma5,
+            -- Simplified window functions for SQLite
+            AVG(iv_proxy)  OVER (PARTITION BY strike, expiry ORDER BY datetime ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS iv_ma5,
             AVG(iv_proxy)  OVER (PARTITION BY strike, expiry ORDER BY datetime ROWS BETWEEN 9 PRECEDING AND CURRENT ROW) AS iv_ma10,
             AVG(iv_proxy)  OVER (PARTITION BY strike, expiry ORDER BY datetime ROWS BETWEEN 19 PRECEDING AND CURRENT ROW) AS iv_ma20,
-            stddev(iv_proxy) OVER (PARTITION BY strike, expiry ORDER BY datetime ROWS BETWEEN 19 PRECEDING AND CURRENT ROW) AS iv_std20,
-            AVG(total_oi)    OVER (PARTITION BY strike, expiry ORDER BY datetime ROWS BETWEEN 4 PRECEDING AND CURRENT ROW)  AS oi_ma5,
+            -- Rolling Standard Deviation Approximation
+            SQRT(
+                AVG(iv_proxy * iv_proxy) OVER (PARTITION BY strike, expiry ORDER BY datetime ROWS BETWEEN 19 PRECEDING AND CURRENT ROW) -
+                (AVG(iv_proxy) OVER (PARTITION BY strike, expiry ORDER BY datetime ROWS BETWEEN 19 PRECEDING AND CURRENT ROW) * 
+                 AVG(iv_proxy) OVER (PARTITION BY strike, expiry ORDER BY datetime ROWS BETWEEN 19 PRECEDING AND CURRENT ROW))
+            ) AS iv_std20,
+            AVG(total_oi)  OVER (PARTITION BY strike, expiry ORDER BY datetime ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS oi_ma5,
             AVG(total_volume) OVER (PARTITION BY strike, expiry ORDER BY datetime ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS vol_ma5,
             spot_close
         FROM options_enriched
@@ -261,7 +266,7 @@ MATERIALIZED_VIEWS = {
             GROUP BY expiry
         ),
         chain AS (
-            SELECT e.strike, e.expiry, e.oi_CE, e.oi_PE
+            SELECT e.strike, e.expiry, e.oi_ce, e.oi_pe
             FROM options_enriched e
             JOIN latest l ON e.expiry = l.expiry AND e.datetime = l.max_dt
         ),
@@ -273,21 +278,21 @@ MATERIALIZED_VIEWS = {
             s.settlement AS settlement_price,
             SUM(
                 CASE WHEN s.settlement > c.strike
-                     THEN (s.settlement - c.strike) * c.oi_CE
+                     THEN (s.settlement - c.strike) * c.oi_ce
                      ELSE 0 END
             ) AS call_liability,
             SUM(
                 CASE WHEN s.settlement < c.strike
-                     THEN (c.strike - s.settlement) * c.oi_PE
+                     THEN (c.strike - s.settlement) * c.oi_pe
                      ELSE 0 END
             ) AS put_liability,
             SUM(
                 CASE WHEN s.settlement > c.strike
-                     THEN (s.settlement - c.strike) * c.oi_CE
+                     THEN (s.settlement - c.strike) * c.oi_ce
                      ELSE 0 END
             ) + SUM(
                 CASE WHEN s.settlement < c.strike
-                     THEN (c.strike - s.settlement) * c.oi_PE
+                     THEN (c.strike - s.settlement) * c.oi_pe
                      ELSE 0 END
             ) AS total_liability
         FROM chain c

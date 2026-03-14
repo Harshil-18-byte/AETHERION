@@ -1,91 +1,96 @@
-import psycopg2
 import pandas as pd
 import threading
-from config import POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DB
+import time
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import OperationalError
+from config import DATABASE_URL
 
 _lock = threading.Lock()
-_connection = None
+_engine = None
 
-class PostgresResultWrapper:
+class SQLiteResultWrapper:
     """Mimics result object for compatibility."""
-    def __init__(self, cursor, conn):
-        self.cursor = cursor
-        self.conn = conn
+    def __init__(self, result):
+        self.result = result
 
     def df(self):
         try:
-            cols = [desc[0] for desc in self.cursor.description] if self.cursor.description else []
-            data = self.cursor.fetchall()
-            return pd.DataFrame(data, columns=cols)
+            return pd.DataFrame(self.result.fetchall(), columns=self.result.keys())
         except Exception:
             return pd.DataFrame()
 
     def fetchone(self):
-        return self.cursor.fetchone()
+        row = self.result.fetchone()
+        return row if row else None
 
     def fetchall(self):
-        return self.cursor.fetchall()
+        return self.result.fetchall()
 
-class PostgresConnectionWrapper:
-    """Wraps psycopg2 connection to provide an execute method."""
-    def __init__(self, conn):
-        self.conn = conn
+class SQLiteConnectionWrapper:
+    """Wraps SQLAlchemy connection to provide an execute method with retries."""
+    def __init__(self, engine):
+        self.engine = engine
 
-    def execute(self, sql, params=None):
-        # Convert DuckDB/SQLite style ? placeholder to Postgres style %s
-        sql = sql.replace("?", "%s")
+    def execute(self, sql, params=None, retries=3, delay=1.0):
+        last_error = None
+        for attempt in range(retries):
+            try:
+                # Use engine.begin() for a transactional context manager
+                # This ensures the connection is closed/returned to the pool properly.
+                with self.engine.connect() as conn:
+                    # SQLAlchemy does not accept list parameters
+                    if isinstance(params, list):
+                        params = tuple(params)
+                    
+                    if params:
+                        result = conn.exec_driver_sql(sql, params)
+                    else:
+                        result = conn.exec_driver_sql(sql.strip())
+                    return SQLiteResultWrapper(result)
+            except OperationalError as e:
+                if "database is locked" in str(e).lower():
+                    last_error = e
+                    print(f"  [DB] Lock detected (attempt {attempt+1}/{retries}), retrying in {delay}s...")
+                    time.sleep(delay)
+                    continue
+                raise e
+            except Exception as e:
+                print("❌ SQL Error:", e)
+                print("Statement:", sql)
+                print("Params:", params)
+                raise e
         
-        cursor = self.conn.cursor()
-        try:
-            if params:
-                cursor.execute(sql, params)
-            else:
-                cursor.execute(sql)
-            
-            # Auto-commit for DDL/DML unless in a transaction
-            if not self.conn.autocommit:
-                self.conn.commit()
-                
-            return PostgresResultWrapper(cursor, self.conn)
-        except Exception as e:
-            self.conn.rollback()
-            raise e
+        print(f"  ❌ Failed after {retries} retries: {last_error}")
+        raise last_error
 
     def close(self):
-        self.conn.close()
+        pass # Engine handles connections
     
     def register(self, name, df):
-        # Implementation for Postgres (writing to temp table)
-        from sqlalchemy import create_engine
-        from config import DATABASE_URL
-        engine = create_engine(DATABASE_URL)
-        df.to_sql(name, engine, if_exists="replace", index=False)
+        # To avoid locking, we must use a single connection for the transaction.
+        with self.engine.begin() as conn:
+            df.to_sql(name, conn, if_exists="replace", index=False)
     
     def unregister(self, name):
         self.execute(f"DROP TABLE IF EXISTS {name}")
 
-def get_connection() -> PostgresConnectionWrapper:
-    """Return the shared Postgres connection, creating it on first call."""
-    global _connection
-    if _connection is None:
+def get_engine():
+    """Return the shared SQLAlchemy engine."""
+    global _engine
+    if _engine is None:
         with _lock:
-            if _connection is None:
-                _connection = psycopg2.connect(
-                    user=POSTGRES_USER,
-                    password=POSTGRES_PASSWORD,
-                    host=POSTGRES_HOST,
-                    port=POSTGRES_PORT,
-                    database=POSTGRES_DB
+            if _engine is None:
+                _engine = create_engine(
+                    DATABASE_URL,
+                    connect_args={"check_same_thread": False, "timeout": 30},
+                    pool_pre_ping=True
                 )
-                print(f"[DB] Connected to PostgreSQL ({POSTGRES_HOST})")
-    return PostgresConnectionWrapper(_connection)
+                print(f"[DB] Initialized SQLite Engine ({DATABASE_URL})")
+    return _engine
+
+def get_connection() -> SQLiteConnectionWrapper:
+    """Return the shared SQLite wrapper."""
+    return SQLiteConnectionWrapper(get_engine())
 
 def close_connection() -> None:
-    """Close the shared connection."""
-    global _connection
-    if _connection is not None:
-        with _lock:
-            if _connection is not None:
-                _connection.close()
-                _connection = None
-                print("[DB] Connection closed")
+    pass

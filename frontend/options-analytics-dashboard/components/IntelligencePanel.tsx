@@ -64,23 +64,23 @@ export default function IntelligencePanel({ structure, volRegime, unusual, flowS
     <>
       {/* Key Intelligence Summary Row */}
       <div className="intel-summary-row">
-        <div className="intel-summary-item">
+        <div className="intel-summary-item animate-in stagger-1">
           <span className="intel-summary-label">Market Sentiment</span>
           <span className={sentimentClass}>{sentimentDisplay}</span>
         </div>
-        <div className="intel-summary-item">
+        <div className="intel-summary-item animate-in stagger-2">
           <span className="intel-summary-label">Support Level</span>
           <span className="intel-summary-value">{structure.support.toLocaleString()}</span>
         </div>
-        <div className="intel-summary-item">
+        <div className="intel-summary-item animate-in stagger-3">
           <span className="intel-summary-label">Resistance Level</span>
           <span className="intel-summary-value">{structure.resistance.toLocaleString()}</span>
         </div>
-        <div className="intel-summary-item">
+        <div className="intel-summary-item animate-in stagger-4">
           <span className="intel-summary-label">Volatility Regime</span>
           <span className={regimeClass}>{volRegime.regime}</span>
         </div>
-        <div className="intel-summary-item">
+        <div className="intel-summary-item animate-in stagger-1">
           <span className="intel-summary-label">Flow Pressure</span>
           <span className={pressureClass}>
             {flowPressure != null ? (flowPressure > 0 ? "Positive" : flowPressure < 0 ? "Negative" : "Neutral") : "N/A"}

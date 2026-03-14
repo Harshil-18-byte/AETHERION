@@ -4,15 +4,15 @@ export interface OptionRow {
   symbol: string;
   datetime: string;
   expiry: string;
-  CE: number;
-  PE: number;
+  ce: number;
+  pe: number;
   spot_close: number;
-  ATM: number;
+  atm: number;
   strike: number;
-  oi_CE: number;
-  oi_PE: number;
-  volume_CE: number;
-  volume_PE: number;
+  oi_ce: number;
+  oi_pe: number;
+  volume_ce: number;
+  volume_pe: number;
 }
 
 export interface GEXByStrike {

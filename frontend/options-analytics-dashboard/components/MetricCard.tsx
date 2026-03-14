@@ -40,10 +40,11 @@ export default function MetricCard({ label, value, subtitle, accent, sentiment, 
       : "metric-subtitle";
 
   return (
-    <div className={`metric-card ${accent ? "metric-card-accent" : ""}`}>
-      <span className="metric-label">{label}</span>
-      <span className="metric-value">{value}</span>
-      {subtitle && <span className={subtitleClass}>{subtitle}</span>}
+    <div className={`metric-card terminal-panel animate-in ${accent ? "metric-card-accent" : ""}`}>
+      <span className="metric-label mono">{label}</span>
+      <span className="metric-value mono">{value}</span>
+      {subtitle && <span className={`${subtitleClass} mono`}>{subtitle}</span>}
+      <div className="metric-grid-overlay" />
     </div>
   );
 }

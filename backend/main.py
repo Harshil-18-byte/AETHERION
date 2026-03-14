@@ -35,7 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from config import LOG_LEVEL
 from db.connection import get_connection, close_connection
 from db.schema import create_schema, create_materialized_views
-from ingestion.loader import load_csv_to_duckdb
+from ingestion.loader import load_csv_to_sqlite
 from ingestion.validator import validate_data
 from features.engineering import run_feature_engineering
 from ml.anomaly import run_anomaly_detection
@@ -58,14 +58,14 @@ def initialize() -> AnalyticsService:
     print("")
 
     # Step 0: Check DB Connection
-    print("[0/7] Checking PostgreSQL connection...")
+    print("[0/7] Checking SQLite connection...")
     try:
         from db.connection import get_connection
         conn = get_connection()
         conn.execute("SELECT 1")
-        print("  ✅ PostgreSQL connection successful.")
+        print("  ✅ SQLite connection successful.")
     except Exception as e:
-        print(f"  ❌ PostgreSQL connection failed: {e}")
+        print(f"  ❌ SQLite connection failed: {e}")
         raise RuntimeError(f"Database unavailable: {e}")
 
     # Step 1: Schema
@@ -74,7 +74,7 @@ def initialize() -> AnalyticsService:
 
     # Step 2: Load CSVs
     print("[2/7] Loading CSV data...")
-    total_rows = load_csv_to_duckdb()
+    total_rows = load_csv_to_sqlite()
 
     # Step 3: Validate
     print("[3/7] Validating data quality...")

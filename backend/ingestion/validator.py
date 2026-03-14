@@ -19,7 +19,7 @@ def validate_data() -> dict:
         raise ValueError("options_raw is empty — no data loaded")
 
     # 2. Null checks in critical columns
-    critical_cols = ["datetime", "strike", "expiry", "spot_close", "oi_CE", "oi_PE"]
+    critical_cols = ["datetime", "strike", "expiry", "spot_close", "oi_ce", "oi_pe"]
     null_report = {}
     for col in critical_cols:
         null_count = conn.execute(

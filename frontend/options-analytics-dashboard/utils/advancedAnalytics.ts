@@ -29,15 +29,15 @@ export function computeDeltaExposure(snapshot: OptionRow[]): DeltaExposureResult
   const spot = snapshot[snapshot.length - 1]?.spot_close || 0;
   let total_dex = 0;
   const by_strike = snapshot.map(row => {
-    const ivCe = approximateIV(row.CE, spot);
-    const ivPe = approximateIV(row.PE, spot);
+    const ivCe = approximateIV(row.ce, spot);
+    const ivPe = approximateIV(row.pe, spot);
     const d1ce = d1(spot, row.strike, ivCe);
     const d1pe = d1(spot, row.strike, ivPe);
     const ceDelta = normalCdf(d1ce);
     const peDelta = normalCdf(d1pe) - 1;
     
-    const call_dex = (ceDelta * row.oi_CE * CONTRACT_SIZE * spot) / 1e7;
-    const put_dex = (peDelta * row.oi_PE * CONTRACT_SIZE * spot) / 1e7;
+    const call_dex = (ceDelta * row.oi_ce * CONTRACT_SIZE * spot) / 1e7;
+    const put_dex = (peDelta * row.oi_pe * CONTRACT_SIZE * spot) / 1e7;
     const net_dex = call_dex + put_dex;
     total_dex += net_dex;
     return { strike: row.strike, call_dex, put_dex, net_dex };
@@ -50,8 +50,8 @@ export function computeVannaCharm(snapshot: OptionRow[]): VannaCharmResult {
     // Vanna measures delta sensitivity to IV. Charm measures delta sensitivity to time.
     // Extremely simplified approximation based on out-of-the-monyness
     const moneyness = Math.log(row.spot_close / row.strike);
-    const vanna = moneyness * (row.oi_CE + row.oi_PE) / 10000; 
-    const charm = -moneyness * (row.volume_CE + row.volume_PE) / 10000;
+    const vanna = moneyness * (row.oi_ce + row.oi_pe) / 10000; 
+    const charm = -moneyness * (row.volume_ce + row.volume_pe) / 10000;
     return { strike: row.strike, vanna, charm };
   });
   return { by_strike };
@@ -62,7 +62,7 @@ export function computeSurface3D(snapshot: OptionRow[]): Surface3DResult {
     strike: row.strike,
     expiry: row.expiry || "2026-03-02",
     days_to_expiry: Math.max(1, 7 + (i % 3)), // Simulating variance across expiries
-    iv: approximateIV(row.CE, row.spot_close)
+    iv: approximateIV(row.ce, row.spot_close)
   })).filter(p => p.iv > 0);
   return { points };
 }
@@ -71,7 +71,7 @@ export function computeSqueezeMetrics(snapshot: OptionRow[]): SqueezeResult {
   let maxCallOi = 0;
   let tStrike = 0;
   snapshot.forEach(row => {
-    if (row.oi_CE > maxCallOi) { maxCallOi = row.oi_CE; tStrike = row.strike; }
+    if (row.oi_ce > maxCallOi) { maxCallOi = row.oi_ce; tStrike = row.strike; }
   });
   const spot = snapshot[snapshot.length-1]?.spot_close || 1;
   const distance = (tStrike - spot) / spot;
@@ -86,16 +86,16 @@ export function computeSqueezeMetrics(snapshot: OptionRow[]): SqueezeResult {
 // --- 2. Flow Tracking ---
 export function simulateLiveTape(snapshot: OptionRow[]): TapePrint[] {
   // Generate fake live tape based on highest volume strikes
-  const activeStrikes = [...snapshot].sort((a,b) => (b.volume_CE+b.volume_PE) - (a.volume_CE+a.volume_PE)).slice(0, 15);
+  const activeStrikes = [...snapshot].sort((a,b) => (b.volume_ce+b.volume_pe) - (a.volume_ce+a.volume_pe)).slice(0, 15);
   return activeStrikes.map((s, i) => {
-    const isCall = s.volume_CE > s.volume_PE;
+    const isCall = s.volume_ce > s.volume_pe;
     return {
       id: `TAPE-${i}-${Date.now()}`,
       time: new Date(Date.now() - Math.random() * 10000).toLocaleTimeString(),
       strike: s.strike,
       type: isCall ? "CALL" : "PUT",
       size: Math.floor(Math.random() * 500) + 50,
-      price: isCall ? s.CE : s.PE,
+      price: isCall ? s.ce : s.pe,
       sentiment: isCall ? "BULLISH" : "BEARISH"
     };
   });
@@ -113,7 +113,7 @@ export function simulateDarkPool(snapshot: OptionRow[]): DarkPoolPrint[] {
 }
 
 export function computeRetailInst(snapshot: OptionRow[]): RetailInstResult {
-  const totalVol = snapshot.reduce((sum, r) => sum + r.volume_CE + r.volume_PE, 0);
+  const totalVol = snapshot.reduce((sum, r) => sum + r.volume_ce + r.volume_pe, 0);
   if(totalVol === 0) return { retail_buy_pct: 25, retail_sell_pct: 25, inst_buy_pct: 25, inst_sell_pct: 25 };
   return {
     retail_buy_pct: 18.5,
@@ -125,16 +125,16 @@ export function computeRetailInst(snapshot: OptionRow[]): RetailInstResult {
 
 export function detectAlgoClusters(snapshot: OptionRow[]): AlgoClusterItem[] {
   return snapshot
-    .filter(r => (r.volume_CE + r.volume_PE) > 50000)
+    .filter(r => (r.volume_ce + r.volume_pe) > 50000)
     .map(r => ({
       strike: r.strike,
-      volume_cluster: r.volume_CE + r.volume_PE,
+      volume_cluster: r.volume_ce + r.volume_pe,
       confidence: Math.round(Math.random() * 40 + 60) // 60-100%
     }));
 }
 
 export function computeTradeSide(snapshot: OptionRow[]): TradeSideResult {
-  const total = snapshot.reduce((sum, r) => sum + r.volume_CE + r.volume_PE, 0);
+  const total = snapshot.reduce((sum, r) => sum + r.volume_ce + r.volume_pe, 0);
   return {
     bid_volume: Math.floor(total * 0.45),
     ask_volume: Math.floor(total * 0.40),
@@ -158,7 +158,7 @@ export function computeTermStructure(snapshot: OptionRow[]): TermStructureResult
 export function computeVolCones(snapshot: OptionRow[]): VolConesResult {
   const spot = snapshot[0]?.spot_close || 25000;
   const atmRow = snapshot.find(r => Math.abs(r.strike - spot) < 100);
-  const current_iv = atmRow ? approximateIV(atmRow.CE, spot) : 15;
+  const current_iv = atmRow ? approximateIV(atmRow.ce, spot) : 15;
   return {
     current_iv,
     iv_percentile_10: 11.2,
@@ -169,8 +169,8 @@ export function computeVolCones(snapshot: OptionRow[]): VolConesResult {
 
 export function computeSkewIndex(snapshot: OptionRow[]): SkewIndexResult {
   const spot = snapshot[0]?.spot_close || 25000;
-  const putIv = approximateIV(snapshot.find(r => r.strike <= spot * 0.95)?.PE || 100, spot);
-  const callIv = approximateIV(snapshot.find(r => r.strike >= spot * 1.05)?.CE || 100, spot);
+  const putIv = approximateIV(snapshot.find(r => r.strike <= spot * 0.95)?.pe || 100, spot);
+  const callIv = approximateIV(snapshot.find(r => r.strike >= spot * 1.05)?.ce || 100, spot);
   const skew = putIv - callIv;
   return {
     skew_score: skew,
@@ -181,7 +181,7 @@ export function computeSkewIndex(snapshot: OptionRow[]): SkewIndexResult {
 export function computeExpectedMove(snapshot: OptionRow[]): ExpectedMoveResult {
   const spot = snapshot[0]?.spot_close || 25000;
   const atmRow = snapshot.find(r => Math.abs(r.strike - spot) < 100);
-  const straddle = atmRow ? (atmRow.CE + atmRow.PE) : (spot * 0.01);
+  const straddle = atmRow ? (atmRow.ce + atmRow.pe) : (spot * 0.01);
   return {
     daily: (straddle / 7) * 0.8,
     weekly: straddle,
@@ -201,8 +201,8 @@ export function computeMaxPain(snapshot: OptionRow[]): MaxPainResult {
   for (const targ of snapshot) {
     let pain = 0;
     for (const opt of snapshot) {
-      if(opt.strike < targ.strike) pain += opt.oi_CE * (targ.strike - opt.strike); // Calls ITM
-      if(opt.strike > targ.strike) pain += opt.oi_PE * (opt.strike - targ.strike); // Puts ITM
+      if(opt.strike < targ.strike) pain += opt.oi_ce * (targ.strike - opt.strike); // Calls ITM
+      if(opt.strike > targ.strike) pain += opt.oi_pe * (opt.strike - targ.strike); // Puts ITM
     }
     if (pain < minPain) { minPain = pain; maxPainStrike = targ.strike; }
   }
@@ -213,13 +213,13 @@ export function computeVolumeProfile(snapshot: OptionRow[]): VolumeProfileResult
   let highestVol = 0;
   let poc = 0;
   snapshot.forEach(r => {
-    const v = r.volume_CE + r.volume_PE;
+    const v = r.volume_ce + r.volume_pe;
     if (v > highestVol) { highestVol = v; poc = r.strike; }
   });
   const profile = snapshot.map(r => ({
     strike: r.strike,
-    call_volume: r.volume_CE,
-    put_volume: r.volume_PE,
+    call_volume: r.volume_ce,
+    put_volume: r.volume_pe,
     poc: r.strike === poc
   }));
   return { profile, poc_strike: poc };

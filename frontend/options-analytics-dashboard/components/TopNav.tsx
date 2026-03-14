@@ -22,28 +22,30 @@ export default function TopNav({ selectedExpiry, expiries, onExpiryChange, lastU
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
 
   // Avoid hydration mismatch
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
-    <header className="topnav">
+    <header className="topnav terminal-header">
       <div className="topnav-left">
-        <div className="topnav-brand">
-          <span className="topnav-title">GammaLens</span>
-          <span className="topnav-tagline">Options Market Intelligence</span>
+        <div className="topnav-brand pulse-border">
+          <span className="topnav-title mono text-amber">GAMMALENS</span>
+          <span className="topnav-tagline mono">TERM <span className="text-green">READY</span></span>
         </div>
 
         <div className="topnav-divider" />
 
         <div className="topnav-asset-info">
           <div className="topnav-asset-item">
-            <span className="topnav-asset-label">Underlying</span>
-            <span className="topnav-asset-value">NIFTY</span>
+            <span className="topnav-asset-label">SYM</span>
+            <span className="topnav-asset-value mono text-cyan">NIFTY</span>
           </div>
           {spotPrice != null && (
             <div className="topnav-asset-item">
-              <span className="topnav-asset-label">Price</span>
-              <span className="topnav-asset-value">
-                {spotPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              <span className="topnav-asset-label">PX_LAST</span>
+              <span className="topnav-asset-value mono text-green">
+                {spotPrice.toLocaleString(undefined, { maximumFractionDigits: 2, minimumFractionDigits: 2 })}
               </span>
             </div>
           )}

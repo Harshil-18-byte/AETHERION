@@ -11,7 +11,7 @@ from pydantic import BaseModel, EmailStr
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
 
 # Pydantic Models for Auth
 class UserBase(BaseModel):
@@ -35,12 +35,15 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     email: Optional[str] = None
 
+from config import DEV_MODE
+
 # Dependency to get current user
-async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    # --- TEMPORARY BYPASS ---
-    BYPASS_AUTH = True
-    if BYPASS_AUTH:
-        # Accept dummy token OR any token from the header for testing
+async def get_current_user(
+    token: Optional[str] = Depends(oauth2_scheme), 
+    db: Session = Depends(get_db)
+):
+    # --- DEVELOPMENT BYPASS ---
+    if DEV_MODE:
         user = db.query(DBUser).filter(DBUser.email == "dev@example.com").first()
         if not user:
             user = DBUser(email="dev@example.com", full_name="Mock User", hashed_password="mask_password")
@@ -48,7 +51,14 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
             db.commit()
             db.refresh(user)
         return user
-    # ------------------------
+    
+    if not token:
+         raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    # --------------------------
 
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
